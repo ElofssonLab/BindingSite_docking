@@ -44,37 +44,6 @@ def ISPRED_top_site(ispred, sep, top=3):
     non_site = [el[0] for el in plist][-3*top:]
     return site, non_site
 
-def fetch_distances(pdb, pred, overlay):
-    site = []
-    close = []
-    far = []
-
-    p = PDBParser(QUIET=True)
-    struc = p.get_structure('', pdb)
-    try: dssp = DSSP(struc[0], pdb)
-    except: dssp = None
-    print (pdb)
-    for c in struc[0]: chain = c.get_id()
-    pred_int = [get_main_coord(struc[0][chain][pos]) for pos in pred]
-    residues = Selection.unfold_entities(struc, 'R')
-    for res1 in residues:
-        pos1 = res1.get_id()[1]
-        name = res1.get_resname()
-        C1 = get_main_coord(res1)
-        if name == 'GLY': continue
-        if dssp is None: 
-            d = min([C1-C2 for C2 in pred_int if not C1 is None and not C2 is None])
-            if d <= 4 : site.append(pos1)
-            elif d <= 12: close.append(pos1)
-            else: far.append(pos1)
-        else: 
-            if dssp[(chain, pos1)][3] == 'NA': continue 
-            d = min([C1-C2 for C2 in pred_int if not C1 is None and not C2 is None])
-            if dssp[(chain, pos1)][3] >= 0.2 and d < 12: site.append(pos1)
-            elif d <= 12: close.append(pos1)
-            else: far.append(pos1)
-    return site, close, far
-
 def get_main_coord(res):
     atoms = [atom.get_id() for atom in res]
     if 'CB' in atoms: return res['CB']
@@ -104,7 +73,7 @@ def custom_docking(pose, file1, file2):
     constraint = score_manager.score_type_from_name('atom_pair_constraint')
 
     sf1 = create_score_function('docking')
-    sf1.set_weight(constraint, 5)
+    sf1.set_weight(constraint, 1)
     SF = sf1
 
     ##### MoveMap #####
@@ -122,20 +91,16 @@ def custom_docking(pose, file1, file2):
     ##### Top Confidence constraint #####
     s1, ns1 = ISPRED_top_site(file1, 0)
     s2, ns2 = ISPRED_top_site(file2, len1)
-    repulsive = (len(ns1)*len(ns2))+(len(s1)*len(ns2))+(len(ns1)*len(s2))
-    cratio = repulsive/(len(s1)*len(s2))
     array = format_ISPRED_rst(s1, s2, ns1, ns2)
     print ('Extracted {} constraints'.format(len(array)))
     minimize(pose, relax, SF, array, 'top')
 
     ##### Confidence Thr. constraint #####
-    s1, ns1 = ISPRED_thr_site(file1, 0)
-    s2, ns2 = ISPRED_thr_site(file2, len1)
-    repulsive = (len(ns1)*len(ns2))+(len(s1)*len(ns2))+(len(ns1)*len(s2))
-    cratio = repulsive/(len(s1)*len(s2))
-    array = format_ISPRED_rst(s1, s2, ns1, ns2)
-    print ('Extracted {} constraints'.format(len(array)))
-    minimize(pose, relax, SF, array, 'thr')
+    #s1, ns1 = ISPRED_thr_site(file1, 0)
+    #s2, ns2 = ISPRED_thr_site(file2, len1)
+    #array = format_ISPRED_rst(s1, s2, ns1, ns2)
+    #print ('Extracted {} constraints'.format(len(array)))
+    #minimize(pose, relax, SF, array, 'thr')
 
 def minimize(pose, mover, sf, array, tag):
 
@@ -168,7 +133,8 @@ if __name__=='__main__':
     parser.add_argument("-d", type=str, help="data directory")
     ns = parser.parse_args()
 
-    init('-hb_cen_soft -relax:default_repeats 5 -default_max_cycles 200 -out:level 100')
+    init('-hb_cen_soft -relax:default_repeats 5 -default_max_cycles 200\
+          -rebuild_disulf false -detect_disulf false -out:level 100')
     scriptdir = ns.s.rstrip('/')+'/'
     datadir = ns.d.rstrip('/')+'/'
     tmpdir = tempfile.TemporaryDirectory(prefix=datadir)
