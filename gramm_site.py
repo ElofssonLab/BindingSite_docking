@@ -198,10 +198,16 @@ if __name__ == "__main__":
     contactidxs = []
     scores1 = [float(line.rstrip().split('\t')[-1]) for line in open(ns.i1)]
     scores2 = [float(line.rstrip().split('\t')[-1]) for line in open(ns.i2)]
-    scores1 = np.expand_dims(np.array(scores1, dtype=np.float32), axis=1)
-    scores2 = np.expand_dims(np.array(scores2, dtype=np.float32), axis=0)
+    scores1 = np.array(scores1, dtype=np.float32)
+    scores2 = np.array(scores2, dtype=np.float32)
+    for p in range(scores1.shape[0]): 
+        if scores1[p] == 0.0: scores1[p] = 0.01
+    for p in range(scores2.shape[0]): 
+        if scores2[p] == 0.0: scores2[p] = 0.01
+    scores1 = np.expand_dims(scores1, axis=1)
+    scores2 = np.expand_dims(scores2, axis=0)
     cmap = scores1*scores2
-    print (cmap.shape)
+    print (cmap, cmap.shape)
 
     sep = len(get_sep(ns.s1))
     contactids = [y+1 for y in range(0, cmap.shape[1]) if np.any(cmap[:,y] >= 0.01)]
@@ -214,7 +220,6 @@ if __name__ == "__main__":
     for c in str2[0]: lchainid = c.get_id()
     rec_res = Selection.unfold_entities(str1, 'R')
     lig_res = Selection.unfold_entities(str2, 'R')
-    print (len(lig_res), len(rec_res))
 
     ##### ligand real interface CB/CA coordinates #####
     lcoordinates = []
@@ -255,7 +260,8 @@ if __name__ == "__main__":
     
     ##### get contact probabilities #####
     contactids = np.array(contactids, dtype=np.int)
-    lrprobs = np.sum(cmap[:,contactids-1, 1:], axis=-1)
+    lrprobs = cmap[:,contactids-1]
+    print (lrprobs)
 
     ##### calculate lcm #####
     lig_atoms = Selection.unfold_entities(str2, 'A')
@@ -292,8 +298,6 @@ if __name__ == "__main__":
         t = tf.expand_dims(t, axis=-1)                                          #
     #############################################################################
 
-    print ("TEST",lcoordinates,rcoordinates)
-    
     ##### graph to roto-translate and score atom coordinates ####################
     with tf.Graph().as_default() as rt_comp:                                    #
         with tf.name_scope('input1'):                                           #
@@ -313,7 +317,7 @@ if __name__ == "__main__":
         B = tf.expand_dims(rtcoord, axis=0)                                     #
         distances = tf.math.sqrt(tf.reduce_sum((A-B)**2, axis=-1))              #
         zeros = tf.zeros(distances.shape, dtype=tf.float32)                     #
-        scores = tf.where(tf.math.less(distances, 20), pr, zeros)               #
+        scores = tf.where(tf.math.less(distances, 12), pr, zeros)               #
         score = tf.math.reduce_sum(scores)                                      #
     #############################################################################
 
