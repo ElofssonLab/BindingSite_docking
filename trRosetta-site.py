@@ -51,7 +51,7 @@ def get_main_coord(res):
     else: return None
 
 def format_ISPRED_rst(siteA, siteB, repA, repB):
-    array = ['AtomPair CB {} CB {} FLAT_HARMONIC 8 1 4'.format(a, b) for a in siteA for b in siteB]
+    array = ['AtomPair CB {} CB {} FLAT_HARMONIC 8 10 4'.format(a, b) for a in siteA for b in siteB]
     array += ['AtomPair CB {} CB {} FLAT_HARMONIC 1000 1 990'.format(a, b) for a in repA for b in siteB]
     array += ['AtomPair CB {} CB {} FLAT_HARMONIC 1000 1 990'.format(a, b) for a in repB for b in siteA]
     array += ['AtomPair CB {} CB {} FLAT_HARMONIC 1000 1 980'.format(a, b) for a in repA for b in repB]
@@ -89,18 +89,18 @@ def custom_docking(pose, file1, file2):
     relax.set_movemap(mmap)
 
     ##### Top Confidence constraint #####
-    s1, ns1 = ISPRED_top_site(file1, 0)
-    s2, ns2 = ISPRED_top_site(file2, len1)
-    array = format_ISPRED_rst(s1, s2, ns1, ns2)
-    print ('Extracted {} constraints'.format(len(array)))
-    minimize(pose, relax, SF, array, 'top')
-
-    ##### Confidence Thr. constraint #####
-    #s1, ns1 = ISPRED_thr_site(file1, 0)
-    #s2, ns2 = ISPRED_thr_site(file2, len1)
+    #s1, ns1 = ISPRED_top_site(file1, 0)
+    #s2, ns2 = ISPRED_top_site(file2, len1)
     #array = format_ISPRED_rst(s1, s2, ns1, ns2)
     #print ('Extracted {} constraints'.format(len(array)))
-    #minimize(pose, relax, SF, array, 'thr')
+    #minimize(pose, relax, SF, array, 'top')
+
+    ##### Confidence Thr. constraint #####
+    s1, ns1 = ISPRED_thr_site(file1, 0)
+    s2, ns2 = ISPRED_thr_site(file2, len1)
+    array = format_ISPRED_rst(s1, s2, ns1, ns2)
+    print ('Extracted {} constraints'.format(len(array)))
+    minimize(pose, relax, SF, array, 'thr')
 
 def minimize(pose, mover, sf, array, tag):
 

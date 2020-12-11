@@ -75,29 +75,61 @@ def auc_stats(scores):
         if el[1] != prev:
             if  (TP != 0 or FN != 0)\
             and (FP != 0 or TN != 0)\
-            and (TP != 0 or FP != 0): 
-                TPRs.append(TP/(TP+FN))
+            and (TP != 0 or FP != 0):
+                PPV = TP/(TP+FP)
+                TPR = TP/(TP+FN)
+                TPRs.append(TPR)
+                PPVs.append(PPV)
                 FPRs.append(FP/(FP+TN))
-                PPVs.append(TP/(TP+FP))
+                num = (TP*TN)-(FP*FN)
+                den = (TP+FP)*(TP+FN)*(TN+FP)*(TN+FN)
+                F1s.append(2*(PPV*TPR)/(PPV+TPR))
+                MCCs.append(num/math.sqrt(den))
+                thrs.append(el[1])
+
         if el[2] == 1.0: 
             FN -= 1
             TP += 1
         else: 
             TN -= 1
             FP += 1
-
         if PPVs == []: PPVs.append(TP/(TP+FP))
         prev = el[1]
 
     if  (TP != 0 or FN != 0)\
     and (FP != 0 or TN != 0)\
     and (TP != 0 or FP != 0):
-        TPRs.append(TP/(TP+FN))
+        PPV = TP/(TP+FP)
+        TPR = TP/(TP+FN)
+        TPRs.append(TPR)
+        PPVs.append(PPV)
         FPRs.append(FP/(FP+TN))
-        PPVs.append(TP/(TP+FP))
+        num = (TP*TN)-(FP*FN)
+        den = (TP+FP)*(TP+FN)*(TN+FP)*(TN+FN)
+        F1s.append(2*(PPV*TPR)/(PPV+TPR))
+        MCCs.append(num/math.sqrt(den))
+        thrs.append(el[1])
 
-    return TPRs, FPRs, PPVs
+    return TPRs, FPRs, PPVs, MCCs, F1s, thrs
 
+def metrics(scorelist, thr):
+    TP = FP = FN = TN = 0
+    for el in scorelist: 
+        if el[1] > thr:
+            if el[2] == 1.0: TP += 1
+            if el[2] == 0.0: FP += 1
+        if el[1] <= thr:
+            if el[2] == 1.0: FN += 1
+            if el[2] == 0.0: TN += 1
+
+    PPV = TP/(TP+FP)
+    TPR = TP/(TP+FN)
+    F1 = 2*(PPV*TPR)/(PPV+TPR)
+    num = (TP*TN)-(FP*FN)
+    den = (TP+FP)*(TP+FN)*(TN+FP)*(TN+FN)
+    MCC = num/math.sqrt(den)
+
+    return F1, MCC
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = "Analyze ISPRED4 predictions")
@@ -128,7 +160,7 @@ if __name__ == "__main__":
 
         allscores += splitscores[:]
         sortedl = mergesort_pred(splitscores)
-        TPRs, FPRs, PPVs = auc_stats(sortedl)
+        TPRs, FPRs, PPVs, MCCs, F1s, thrs = auc_stats(sortedl)
         if len(TPRs) > 2:
             PRauc = auc(TPRs, PPVs)
             ROCauc = auc(FPRs, TPRs)
@@ -138,53 +170,50 @@ if __name__ == "__main__":
             elif metrics[pdbcode][0] > PRauc: 
                 metrics[pdbcode] = [PRauc, ROCauc, TPRs, FPRs, PPVs] + topPPV
 
-    sortedl = mergesort_pred(allscores)
-    TPRs, FPRs, PPVs = auc_stats(sortedl)
 
+    bins = np.arange(0, 1.1, 0.1)
+    sortedl = mergesort_pred(allscores)
+    TPRs, FPRs, PPVs, MCCs, F1s, thrs = auc_stats(sortedl)
     df = pd.DataFrame(metrics).T
+ 
+    ##### ROC curves
+    fig, axes = plt.subplots(2, 2, figsize=(25, 25))
     best20 = df.sort_values(1, ascending=False)[:10]
     worst20 = df.sort_values(1, ascending=True)[:10]
     b20 = list(best20.index)
     w20 = list(worst20.index)
 
-    fs = 14
-    bins = np.arange(0, 1.1, 0.1) 
-    ##### all ROC curves
-    fig, axes = plt.subplots(1, 2, figsize=(25,10))
     sb.lineplot(FPRs, TPRs, ci=None, linewidth=1.2, color='purple', ax=axes[0])
-    for key in b20: sb.lineplot(metrics[key][3], metrics[key][2], ci=None, linewidth=0.6, color='blue', ax=axes[0])
-    for key in w20: sb.lineplot(metrics[key][3], metrics[key][2], ci=None, linewidth=0.6, color='orange', ax=axes[0])
-    axes[0].set_xlabel("1 - Specificity")
-    axes[0].set_ylabel("Recall")
-    axes[0].set_xlim(0,1)
-    axes[0].set_ylim(0,1)
+    for key in b20: sb.lineplot(metrics[key][3], metrics[key][2], ci=None, linewidth=0.6, color='blue', ax=axes[0,0])
+    for key in w20: sb.lineplot(metrics[key][3], metrics[key][2], ci=None, linewidth=0.6, color='orange', ax=axes[0,0])
+    axes[0,0].set_xlabel("1 - Specificity")
+    axes[0,0].set_ylabel("Recall")
+    axes[0,0].set_xlim(0,1)
+    axes[0,0].set_ylim(0,1)
 
-    rocs = [metrics[key][1] for key in metrics]
-    sb.distplot(rocs, kde=False, bins=bins, ax=axes[1])
-    mean = statistics.mean(rocs)
-    median = statistics.median(rocs)
-    #axes[1].vlines(mean, 0, 50)
-    axes[1].vlines(median, 0, 70)
-    axes[1].set_xlabel("ROC curve AUCs")
-    axes[1].set_xlim(0,1)
-    axes[1].set_ylim(0,70)
-    fig.savefig('allROCs.png')
-
-    ##### all PR curves
-
+    ##### PR curves
     best20 = df.sort_values(0, ascending=False)[:10]
     worst20 = df.sort_values(0, ascending=True)[:10]
     b20 = list(best20.index)
     w20 = list(worst20.index)
 
-    fig, axes = plt.subplots(1, 2, figsize=(25,10)) 
-    sb.lineplot(TPRs, PPVs, ci=None, linewidth=1.2, color='purple', ax=axes[0])
-    for key in b20: sb.lineplot(metrics[key][2], metrics[key][4], ci=None, linewidth=0.6, color='blue', ax=axes[0])
-    for key in w20: sb.lineplot(metrics[key][2], metrics[key][4], ci=None, linewidth=0.6, color='orange', ax=axes[0])
-    axes[0].set_xlabel("Recall")
-    axes[0].set_ylabel("Precision")
-    axes[0].set_xlim(0,1)
-    axes[0].set_ylim(0,1)
+    sb.lineplot(TPRs, PPVs, ci=None, linewidth=1.2, color='purple', ax=axes[1,0])
+    for key in b20: sb.lineplot(metrics[key][2], metrics[key][4], ci=None, linewidth=0.6, color='blue', ax=axes[1,0])
+    for key in w20: sb.lineplot(metrics[key][2], metrics[key][4], ci=None, linewidth=0.6, color='orange', ax=axes[1,0])
+    axes[1,0].set_xlabel("Recall")
+    axes[1,0].set_ylabel("Precision")
+    axes[1,0].set_xlim(0,1)
+    axes[1,0].set_ylim(0,1)
+
+    rocs = [metrics[key][1] for key in metrics]
+    sb.distplot(rocs, kde=False, bins=bins, ax=axes[1,0])
+    mean = statistics.mean(rocs)
+    median = statistics.median(rocs)
+    #axes[1].vlines(mean, 0, 50)
+    axes[1,0].vlines(median, 0, 70)
+    axes[1,0].set_xlabel("ROC curve AUCs")
+    axes[1,0].set_xlim(0,1)
+    axes[1,0].set_ylim(0,70)
 
     prs = [metrics[key][0] for key in metrics]
     sb.distplot(prs, kde=False, bins=bins, ax=axes[1])
@@ -196,22 +225,4 @@ if __name__ == "__main__":
     axes[1].set_xlim(0,1)
     axes[1].set_ylim(0,100)
     fig.savefig('allPRs.png')
-
-#    ##### top PPVs
-#    fig, axes = plt.subplots(1, 3, sharey=True, figsize=(25,10))
-#    top5 = [ metrics[key][5] for key in metrics ]
-#    top10 = [ metrics[key][6] for key in metrics ]
-#    top20 = [ metrics[key][7] for key in metrics ]
-#    sb.distplot(top5, kde=False, ax=axes[0])
-#    sb.distplot(top10, kde=False, ax=axes[1])
-#    sb.distplot(top20, kde=False, ax=axes[2])
-#    axes[0].set_xlabel('Top5')
-#    axes[0].set_xlim(0,1)
-#    axes[1].set_xlabel('Top10')
-#    axes[1].set_xlim(0,1)
-#    axes[2].set_xlabel('Top20')
-#    axes[2].set_xlim(0,1)
-#    fig.text(0.513, 0.02, 'Precision', ha='center')
-#    fig.savefig('topPPVs.png')
-
 
