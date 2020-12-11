@@ -1,6 +1,8 @@
 import sys
+import pandas
+pandas.set_option('display.max_rows', 10)
 
-dockqs = [[line.split[-2].split('/')[-1], line.split()[1]] for line in open(sys.argv[1])]
+dockqs = [[line.split()[-2].split('/')[-1], line.split()[1]] for line in open(sys.argv[1])]
 
 dic = {}
 for code, score in dockqs:
@@ -8,4 +10,7 @@ for code, score in dockqs:
     if code not in dic: dic[code] = [float(score)]
     else: dic[code].append(float(score))
 
-for code in dic: print('Max dockQ score for complex {}: {}'.format(code, max(dic[code])))
+for code in dic: dic[code] = max(dic[code])
+df = pandas.DataFrame(dic, index=[0]).T
+pandas.set_option('display.max_rows', df.shape[0]+1)
+print (df.sort_values(0, ascending=False))
