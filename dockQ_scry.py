@@ -8,4 +8,4 @@ for code, score in dockqs:
     if code not in dic: dic[code] = [float(score)]
     else: dic[code].append(float(score))
 
-for code in dic: print('Max dockQ score for complex {}: {}'.format(code, max(dic[code]))
+for code in dic: print('Max dockQ score for complex {}: {}'.format(code, max(dic[code])))
