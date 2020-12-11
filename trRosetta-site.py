@@ -52,9 +52,9 @@ def get_main_coord(res):
 
 def format_ISPRED_rst(siteA, siteB, repA, repB):
     array = ['AtomPair CB {} CB {} FLAT_HARMONIC 8 10 4'.format(a, b) for a in siteA for b in siteB]
-    array += ['AtomPair CB {} CB {} FLAT_HARMONIC 1000 1 990'.format(a, b) for a in repA for b in siteB]
-    array += ['AtomPair CB {} CB {} FLAT_HARMONIC 1000 1 990'.format(a, b) for a in repB for b in siteA]
-    array += ['AtomPair CB {} CB {} FLAT_HARMONIC 1000 1 980'.format(a, b) for a in repA for b in repB]
+    #array += ['AtomPair CB {} CB {} FLAT_HARMONIC 1000 1 990'.format(a, b) for a in repA for b in siteB]
+    #array += ['AtomPair CB {} CB {} FLAT_HARMONIC 1000 1 990'.format(a, b) for a in repB for b in siteA]
+    #array += ['AtomPair CB {} CB {} FLAT_HARMONIC 1000 1 980'.format(a, b) for a in repA for b in repB]
     return array
 
 def apply_rst(pose, array, constraints_file):
@@ -112,7 +112,7 @@ def minimize(pose, mover, sf, array, tag):
     translation = 10
     dock_pert = RigidBodyPerturbMover(1, rotation, translation)
 
-    for n in range(5):
+    for n in range(10):
         pose.remove_constraints()
         for _ in range(1000): dock_pert.apply(pose)
         apply_rst(pose, array, tmpdir.name+'/minimize.cst')
