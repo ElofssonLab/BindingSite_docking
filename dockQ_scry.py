@@ -1,6 +1,5 @@
 import sys
 import pandas
-pandas.set_option('display.max_rows', 10)
 
 dockqs = [[line.split()[-2].split('/')[-1], line.split()[1]] for line in open(sys.argv[1])]
 

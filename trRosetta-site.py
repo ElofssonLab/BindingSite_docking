@@ -5,6 +5,9 @@ import numpy as np
 import random as rnd
 from Bio.PDB import *
 from Bio.PDB.DSSP import DSSP
+from sklearn.cluster import AgglomerativeClustering
+from scipy.stats.stats import pearsonr
+
 from pyrosetta import *
 from pyrosetta.rosetta import *
 from pyrosetta.rosetta.utility import vector1_int
@@ -16,15 +19,13 @@ from pyrosetta.rosetta.protocols.rigid import *
 def ISPRED_thr_site(ispred, sep, thr=0.1):
     count = 0
     site = []
-    non_site = []
     for line in open(ispred):
         count += 1
         res = count + sep
         score = float(line.split()[-1])
         if seq[res-1] == 'G': continue
         if score > thr: site.append(res)
-        else: non_site.append(res)
-    return site, non_site
+    return site
 
 def ISPRED_top_site(ispred, sep, top=3):
     count = 0
@@ -40,21 +41,35 @@ def ISPRED_top_site(ispred, sep, top=3):
                     plist = plist[:p]+[[res,score]]+plist[p:]
                     break
             if [res,score] not in plist: plist.append([res,score])           
-    site = [el[0] for el in plist][:top]
-    non_site = [el[0] for el in plist][-3*top:]
-    return site, non_site
+    site = [el[0] for el in plist]
+    return site
 
-def get_main_coord(res):
+def get_main_atom(res):
     atoms = [atom.get_id() for atom in res]
     if 'CB' in atoms: return res['CB']
     elif 'CA' in atoms: return res['CA']
     else: return None
 
-def format_ISPRED_rst(siteA, siteB, repA, repB):
-    array = ['AtomPair CB {} CB {} FLAT_HARMONIC 8 10 4'.format(a, b) for a in siteA for b in siteB]
-    #array += ['AtomPair CB {} CB {} FLAT_HARMONIC 1000 1 990'.format(a, b) for a in repA for b in siteB]
-    #array += ['AtomPair CB {} CB {} FLAT_HARMONIC 1000 1 990'.format(a, b) for a in repB for b in siteA]
-    #array += ['AtomPair CB {} CB {} FLAT_HARMONIC 1000 1 980'.format(a, b) for a in repA for b in repB]
+def format_ISPRED_rst(siteA, siteB, strA, strB):
+    siteatomsA = {}
+    siteatomsB = {}
+    for res in Selection.unfold_entities(strA, 'R'):
+        if res.get_id[1] in siteA and get_main_coord(res) != None: 
+            siteatomsA[res.get_id[1]] = get_main_atom(res)
+    for res in Selection.unfold_entities(strB, 'R'):
+        if res.get_id[1] in siteB and get_main_coord(res) != None:
+            siteatomsB[res.get_id[1]] = get_main_atom(res)
+    idxA = siteatomsA.keys()
+    idxB = siteatomsB.keys()
+    coordA = [siteatomsA[idx].get_coord() for idx in idxA]
+    coordB = [siteatomsB[idx].get_coord() for idx in idxB]
+    clust = AgglomerativeClustering(distance_threshold=12).fit(coordA)
+    clusteredA = clust.labels_
+    clust = AgglomerativeClustering(distance_threshold=12).fit(coordB)
+    clusteredB = clust.labels_
+    print (clusteredA, clusteredB)
+
+    array = ['AtomPair CB {} CB {} FLAT_HARMONIC 8 1 4'.format(a, b) for a in siteA for b in siteB]
     return array
 
 def apply_rst(pose, array, constraints_file):
@@ -89,18 +104,18 @@ def custom_docking(pose, file1, file2):
     relax.set_movemap(mmap)
 
     ##### Top Confidence constraint #####
-    #s1, ns1 = ISPRED_top_site(file1, 0)
-    #s2, ns2 = ISPRED_top_site(file2, len1)
-    #array = format_ISPRED_rst(s1, s2, ns1, ns2)
-    #print ('Extracted {} constraints'.format(len(array)))
-    #minimize(pose, relax, SF, array, 'top')
+    s1 = ISPRED_top_site(file1, 0)
+    s2 = ISPRED_top_site(file2, len1)
+    array = format_ISPRED_rst(s1, s2)
+    print ('Extracted {} constraints'.format(len(array)))
+    minimize(pose, relax, SF, array, 'top')
 
     ##### Confidence Thr. constraint #####
-    s1, ns1 = ISPRED_thr_site(file1, 0)
-    s2, ns2 = ISPRED_thr_site(file2, len1)
-    array = format_ISPRED_rst(s1, s2, ns1, ns2)
-    print ('Extracted {} constraints'.format(len(array)))
-    minimize(pose, relax, SF, array, 'thr')
+    #s1, ns1 = ISPRED_thr_site(file1, 0)
+    #s2, ns2 = ISPRED_thr_site(file2, len1)
+    #array = format_ISPRED_rst(s1, s2, ns1, ns2)
+    #print ('Extracted {} constraints'.format(len(array)))
+    #minimize(pose, relax, SF, array, 'thr')
 
 def minimize(pose, mover, sf, array, tag):
 
@@ -138,6 +153,11 @@ if __name__=='__main__':
     scriptdir = ns.s.rstrip('/')+'/'
     datadir = ns.d.rstrip('/')+'/'
     tmpdir = tempfile.TemporaryDirectory(prefix=datadir)
+
+    ##### biopython objects #####
+    p = PDBParser(QUIET=True)
+    str1 = p.get_structure('', ns.str1)[0]
+    str2 = p.get_structure('', ns.str2)[0]
 
     ##### Pose initialization #####
     p1 = pose_from_pdb(ns.str1)
