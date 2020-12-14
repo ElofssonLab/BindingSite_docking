@@ -1,11 +1,12 @@
 import sys,os,json
+import math
 import tempfile
 import argparse
 import numpy as np
 import random as rnd
 from Bio.PDB import *
 from Bio.PDB.DSSP import DSSP
-from sklearn.cluster import AgglomerativeClustering
+from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.stats.stats import pearsonr
 
 from pyrosetta import *
@@ -15,6 +16,9 @@ from pyrosetta.rosetta.protocols.docking import DockingLowRes, DockMinMover
 from pyrosetta.rosetta.protocols.minimization_packing import MinMover
 from pyrosetta.rosetta.core.pose import append_pose_to_pose, renumber_pdbinfo_based_on_conf_chains
 from pyrosetta.rosetta.protocols.rigid import *
+
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 def ISPRED_thr_site(ispred, sep, thr=0.1):
     count = 0
@@ -27,22 +31,21 @@ def ISPRED_thr_site(ispred, sep, thr=0.1):
         if score > thr: site.append(res)
     return site
 
-def ISPRED_top_site(ispred, sep, top=3):
+def ISPRED_top_site(ispred, sep, thr=0.5):
     count = 0
-    plist = []
+    score_list = []
     for line in open(ispred):
         count += 1
         res = count + sep
         score = float(line.split()[-1])
+        if score < thr: continue
         if seq[res-1] == 'G': continue
-        else: 
-            for p, r in enumerate(plist):
-                if score > r[1]: 
-                    plist = plist[:p]+[[res,score]]+plist[p:]
-                    break
-            if [res,score] not in plist: plist.append([res,score])           
-    site = [el[0] for el in plist]
-    return site
+        score_list.append([res,score])
+    score_list = np.array(score_list, dtype=np.float32)
+    score_list = score_list[score_list[:,1].argsort()[::-1]]
+    if len(score_list)>=21: site = score_list[:20,0]
+    else: site = score_list[:,0]
+    return site.flatten()
 
 def get_main_atom(res):
     atoms = [atom.get_id() for atom in res]
@@ -50,27 +53,94 @@ def get_main_atom(res):
     elif 'CA' in atoms: return res['CA']
     else: return None
 
-def format_ISPRED_rst(siteA, siteB, strA, strB):
+def find_center(coord_list):
+    acc = [0,0,0]
+    for x, y, z in coord_list:
+        acc[0]+=x
+        acc[1]+=y
+        acc[2]+=z
+    center = [coord/len(coord_list) for coord in acc]
+    return center
+
+def get_closest_clusters(siteatoms, clusterdic, largest, thr):
+    centers = {}
+    for key in clusterdic:
+        coords = [siteatoms[idx].get_coord() for idx in clusterdic[key]]
+        centers[key] = find_center(coords)
+
+    good_clust = []
+    main_center = np.array(centers[largest])
+    for key in centers:
+        if key == largest: continue
+        neigh = np.array(centers[key])
+        dist = np.linalg.norm(main_center-neigh)
+        if dist < thr: good_clust.append(key)
+    return good_clust
+
+def format_ISPRED_rst(siteA, siteB):
+    ##### dictionary to map indexes to CB/CA atoms
     siteatomsA = {}
     siteatomsB = {}
-    for res in Selection.unfold_entities(strA, 'R'):
-        if res.get_id[1] in siteA and get_main_coord(res) != None: 
-            siteatomsA[res.get_id[1]] = get_main_atom(res)
-    for res in Selection.unfold_entities(strB, 'R'):
-        if res.get_id[1] in siteB and get_main_coord(res) != None:
-            siteatomsB[res.get_id[1]] = get_main_atom(res)
-    idxA = siteatomsA.keys()
-    idxB = siteatomsB.keys()
-    coordA = [siteatomsA[idx].get_coord() for idx in idxA]
-    coordB = [siteatomsB[idx].get_coord() for idx in idxB]
-    clust = AgglomerativeClustering(distance_threshold=12).fit(coordA)
-    clusteredA = clust.labels_
-    clust = AgglomerativeClustering(distance_threshold=12).fit(coordB)
-    clusteredB = clust.labels_
-    print (clusteredA, clusteredB)
+    for res in Selection.unfold_entities(str1, 'R'):
+        if res.get_id()[1] in siteA and get_main_atom(res) != None: 
+            siteatomsA[res.get_id()[1]] = get_main_atom(res)
+    for res in Selection.unfold_entities(str2, 'R'):
+        if res.get_id()[1] in siteB and get_main_atom(res) != None:
+            siteatomsB[res.get_id()[1]] = get_main_atom(res)
+    idxA = list(siteatomsA.keys())
+    idxB = list(siteatomsB.keys())
+    coordsA = np.array([siteatomsA[idx].get_coord() for idx in idxA])
+    coordsB = np.array([siteatomsB[idx].get_coord() for idx in idxB])
 
-    array = ['AtomPair CB {} CB {} FLAT_HARMONIC 8 1 4'.format(a, b) for a in siteA for b in siteB]
-    return array
+    ##### clustering binding site predictions
+    linkA = linkage(coordsA)
+    linkB = linkage(coordsB)
+    clustA = fcluster(linkA, 8, criterion='distance')
+    clustB = fcluster(linkB, 8, criterion='distance')
+
+    clustdicA = {}
+    clustdicB = {}
+    for idx, clust in enumerate(clustA):
+        clustdicA[clust] = clustdicA.get(clust, []) + [idxA[idx]]
+    for idx, clust in enumerate(clustB):
+        clustdicB[clust] = clustdicB.get(clust, []) + [idxB[idx]]
+
+    ##### find largest clusters
+    maxlen = 0
+    largestA = ''
+    for idx in clustdicA: 
+        if len(clustdicA[idx]) > maxlen: 
+            largestA = idx
+            maxlen = len(clustdicA[idx])
+    maxlen = 0
+    largestB = ''
+    for idx in clustdicB: 
+        if len(clustdicB[idx]) > maxlen:
+            largestB = idx
+            maxlen = len(clustdicB[idx])
+    
+    ##### max size of the smallest cluster
+    dA = [siteatomsA[idx1]-siteatomsA[idx2] for idx1 in clustdicA[largestA] for idx2 in clustdicA[largestA]]
+    dB = [siteatomsB[idx1]-siteatomsB[idx2] for idx1 in clustdicB[largestB] for idx2 in clustdicB[largestB]]
+    dmax = min(max(dA), max(dB))
+
+    neighbours = get_closest_clusters(siteatomsA, clustdicA, largestA, dmax)
+
+    #fig = plt.figure()
+    #ax = fig.add_subplot(111, projection='3d')
+    #ax.scatter(coordsA[:,0], coordsA[:,1], coordsA[:,2], c=clustA, cmap='prism')  # plot points with cluster dependent colors
+    #ax.scatter(coordsB[:,0], coordsB[:,1], coordsB[:,2], c=clustB, cmap='terrain')
+    #plt.show()
+    #sys.exit()
+
+    siteA = clustdicA[largestA]
+    siteB = clustdicB[largestB]
+    arrays = [['AtomPair CB {} CB {} FLAT_HARMONIC 8 1 4'.format(a, b) for a in siteA for b in siteB]]
+    for clust in neighbours:
+        siteA = clustdicA[clust]
+        subarray = ['AtomPair CB {} CB {} FLAT_HARMONIC 8 1 4'.format(a, b) for a in siteA for b in siteB]
+        arrays.append(subarray)
+    return arrays
 
 def apply_rst(pose, array, constraints_file):
     with open(constraints_file,'w') as f:
@@ -106,9 +176,9 @@ def custom_docking(pose, file1, file2):
     ##### Top Confidence constraint #####
     s1 = ISPRED_top_site(file1, 0)
     s2 = ISPRED_top_site(file2, len1)
-    array = format_ISPRED_rst(s1, s2)
-    print ('Extracted {} constraints'.format(len(array)))
-    minimize(pose, relax, SF, array, 'top')
+    arrays = format_ISPRED_rst(s1, s2)
+    print ('Extracted {} constraints'.format(len(arrays[0])))
+    minimize(pose, relax, SF, arrays, 'top')
 
     ##### Confidence Thr. constraint #####
     #s1, ns1 = ISPRED_thr_site(file1, 0)
@@ -117,22 +187,32 @@ def custom_docking(pose, file1, file2):
     #print ('Extracted {} constraints'.format(len(array)))
     #minimize(pose, relax, SF, array, 'thr')
 
-def minimize(pose, mover, sf, array, tag):
+def minimize(pose, mover, sf, arrays, tag):
 
-    pose.remove_constraints()
-    apply_rst(pose, array, tmpdir.name+'/minimize.cst')
     print ('True pose energy:'+str(sf(pose)))
-
-    rotation = 30
+    
+    rotation = 60
     translation = 10
     dock_pert = RigidBodyPerturbMover(1, rotation, translation)
+    for _ in range(1000): dock_pert.apply(pose)
+    pose.dump_pdb(ns.out+'_init.pdb')
+    
+    rotation = 10
+    translation = 3
+    dock_pert = RigidBodyPerturbMover(1, rotation, translation)
 
+    count = 0
     for n in range(10):
-        pose.remove_constraints()
-        for _ in range(1000): dock_pert.apply(pose)
-        apply_rst(pose, array, tmpdir.name+'/minimize.cst')
+        dock_pert.apply(pose)
         print ('Pose energy before dock:'+str(sf(pose)))
+        if count == len(arrays): count = 0
+        apply_rst(pose, arrays[count], tmpdir.name+'/minimize.cst')
+        if count == len(arrays): count = 0
+        #if count > 0: apply_rst(pose, arrays[count], tmpdir.name+'/minimize.cst')
+        count += 1
+
         mover.apply(pose)
+        pose.remove_constraints()
         print ('Pose energy after dock:'+str(sf(pose)))
         pose.dump_pdb(ns.out+'_'+tag+str(n+1)+'.pdb')
 

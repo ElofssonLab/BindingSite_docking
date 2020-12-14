@@ -61,11 +61,14 @@ def merge(job):
     return l
 
 def auc_stats(scores):
-
+    TP = FP = FN = TN = 0
     TPRs = [0.0]
     FPRs = [0.0]
-    PPVs = []
-    TP = FP = FN = TN = 0
+    PPVs = [0.0]
+    thrs = []
+    MCCs = []
+    F1s = []
+
     for el in scores: 
         if el[2] == 1.0: FN += 1
         else: TN += 1
@@ -81,10 +84,13 @@ def auc_stats(scores):
                 TPRs.append(TPR)
                 PPVs.append(PPV)
                 FPRs.append(FP/(FP+TN))
-                num = (TP*TN)-(FP*FN)
-                den = (TP+FP)*(TP+FN)*(TN+FP)*(TN+FN)
-                F1s.append(2*(PPV*TPR)/(PPV+TPR))
-                MCCs.append(num/math.sqrt(den))
+                if TPR != 0 or PPV != 0: F1s.append(2*(PPV*TPR)/(PPV+TPR))
+                else: F1s.append(0.0)
+                if TN != 0 or FN != 0:
+                    num = (TP*TN)-(FP*FN)
+                    den = (TP+FP)*(TP+FN)*(TN+FP)*(TN+FN)
+                    MCCs.append(num/math.sqrt(den))
+                else: MCCs.append(0.0)    
                 thrs.append(el[1])
 
         if el[2] == 1.0: 
@@ -93,7 +99,6 @@ def auc_stats(scores):
         else: 
             TN -= 1
             FP += 1
-        if PPVs == []: PPVs.append(TP/(TP+FP))
         prev = el[1]
 
     if  (TP != 0 or FN != 0)\
@@ -104,15 +109,18 @@ def auc_stats(scores):
         TPRs.append(TPR)
         PPVs.append(PPV)
         FPRs.append(FP/(FP+TN))
-        num = (TP*TN)-(FP*FN)
-        den = (TP+FP)*(TP+FN)*(TN+FP)*(TN+FN)
-        F1s.append(2*(PPV*TPR)/(PPV+TPR))
-        MCCs.append(num/math.sqrt(den))
+        if PPV != 0 or TPR != 0: F1s.append(2*(PPV*TPR)/(PPV+TPR))
+        else: F1s.append(0.0)
+        if TN != 0 or FN != 0:
+            num = (TP*TN)-(FP*FN)
+            den = (TP+FP)*(TP+FN)*(TN+FP)*(TN+FN)
+            MCCs.append(num/math.sqrt(den))
+        else: MCCs.append(0.0)
         thrs.append(el[1])
 
     return TPRs, FPRs, PPVs, MCCs, F1s, thrs
 
-def metrics(scorelist, thr):
+def get_metrics(scorelist, thr):
     TP = FP = FN = TN = 0
     for el in scorelist: 
         if el[1] > thr:
@@ -122,14 +130,23 @@ def metrics(scorelist, thr):
             if el[2] == 1.0: FN += 1
             if el[2] == 0.0: TN += 1
 
-    PPV = TP/(TP+FP)
-    TPR = TP/(TP+FN)
-    F1 = 2*(PPV*TPR)/(PPV+TPR)
-    num = (TP*TN)-(FP*FN)
-    den = (TP+FP)*(TP+FN)*(TN+FP)*(TN+FN)
-    MCC = num/math.sqrt(den)
+    if TP != 0 or FP != 0: PPV = TP/(TP+FP) 
+    else: PPV = 0
+    if TP != 0 or FN != 0: TPR = TP/(TP+FN)
+    else: TPR = 0
+    if PPV != 0 or TPR != 0: F1 = 2*(PPV*TPR)/(PPV+TPR)
+    else: F1 = 0
 
-    return F1, MCC
+    if  (TP != 0 or FN != 0)\
+    and (FP != 0 or TN != 0)\
+    and (TP != 0 or FP != 0)\
+    and (TN != 0 or FN != 0):
+        num = (TP*TN)-(FP*FN)
+        den = (TP+FP)*(TP+FN)*(TN+FP)*(TN+FN)
+        MCC = num/math.sqrt(den)
+    else: MCC = 0
+
+    return F1, MCC, TPR, PPV
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = "Analyze ISPRED4 predictions")
@@ -146,7 +163,7 @@ if __name__ == "__main__":
     p = PDBParser(QUIET=True)
     for code in codelist:
         splitscores = []
-        pdbcode = code.rstrip('_u12')
+        pdbcode = code[:4]
         isp = open(ns.p+code+'.ispred4.tsv')
         ist = open(ns.t+code+'.ispred4.tsv')
         pdb = p.get_structure('', ns.s+code+'.pdb')
@@ -160,36 +177,36 @@ if __name__ == "__main__":
 
         allscores += splitscores[:]
         sortedl = mergesort_pred(splitscores)
+        F1, MCC, TPR, PPV = get_metrics(sortedl, 0.75)
         TPRs, FPRs, PPVs, MCCs, F1s, thrs = auc_stats(sortedl)
         if len(TPRs) > 2:
             PRauc = auc(TPRs, PPVs)
             ROCauc = auc(FPRs, TPRs)
-            topPPV = [sum([1 for el in sortedl[:int(lbl)] if el[-1] == 1.0])/float(lbl)\
-                      for lbl in ['5', '10', '20']]
-            if not pdbcode in metrics: metrics[pdbcode] = [PRauc, ROCauc, TPRs, FPRs, PPVs] + topPPV
-            elif metrics[pdbcode][0] > PRauc: 
-                metrics[pdbcode] = [PRauc, ROCauc, TPRs, FPRs, PPVs] + topPPV
 
+            if not pdbcode in metrics: 
+                metrics[pdbcode] = [PRauc, ROCauc, TPRs, FPRs, PPVs, F1, MCC, TPR, PPV]
+            if metrics[pdbcode][0] > PRauc: 
+                metrics[pdbcode] = [PRauc, ROCauc, TPRs, FPRs, PPVs, F1, MCC, TPR, PPV]
 
     bins = np.arange(0, 1.1, 0.1)
     sortedl = mergesort_pred(allscores)
     TPRs, FPRs, PPVs, MCCs, F1s, thrs = auc_stats(sortedl)
     df = pd.DataFrame(metrics).T
- 
+
     ##### ROC curves
-    fig, axes = plt.subplots(2, 2, figsize=(25, 25))
+    fig, axes = plt.subplots(1, 2, figsize=(25, 10))
     best20 = df.sort_values(1, ascending=False)[:10]
     worst20 = df.sort_values(1, ascending=True)[:10]
     b20 = list(best20.index)
     w20 = list(worst20.index)
 
     sb.lineplot(FPRs, TPRs, ci=None, linewidth=1.2, color='purple', ax=axes[0])
-    for key in b20: sb.lineplot(metrics[key][3], metrics[key][2], ci=None, linewidth=0.6, color='blue', ax=axes[0,0])
-    for key in w20: sb.lineplot(metrics[key][3], metrics[key][2], ci=None, linewidth=0.6, color='orange', ax=axes[0,0])
-    axes[0,0].set_xlabel("1 - Specificity")
-    axes[0,0].set_ylabel("Recall")
-    axes[0,0].set_xlim(0,1)
-    axes[0,0].set_ylim(0,1)
+    for key in b20: sb.lineplot(metrics[key][3], metrics[key][2], ci=None, linewidth=0.6, color='blue', ax=axes[0])
+    for key in w20: sb.lineplot(metrics[key][3], metrics[key][2], ci=None, linewidth=0.6, color='orange', ax=axes[0])
+    axes[0].set_xlabel("1 - Specificity")
+    axes[0].set_ylabel("Recall")
+    axes[0].set_xlim(0,1)
+    axes[0].set_ylim(0,1)
 
     ##### PR curves
     best20 = df.sort_values(0, ascending=False)[:10]
@@ -197,32 +214,37 @@ if __name__ == "__main__":
     b20 = list(best20.index)
     w20 = list(worst20.index)
 
-    sb.lineplot(TPRs, PPVs, ci=None, linewidth=1.2, color='purple', ax=axes[1,0])
-    for key in b20: sb.lineplot(metrics[key][2], metrics[key][4], ci=None, linewidth=0.6, color='blue', ax=axes[1,0])
-    for key in w20: sb.lineplot(metrics[key][2], metrics[key][4], ci=None, linewidth=0.6, color='orange', ax=axes[1,0])
-    axes[1,0].set_xlabel("Recall")
-    axes[1,0].set_ylabel("Precision")
-    axes[1,0].set_xlim(0,1)
-    axes[1,0].set_ylim(0,1)
-
-    rocs = [metrics[key][1] for key in metrics]
-    sb.distplot(rocs, kde=False, bins=bins, ax=axes[1,0])
-    mean = statistics.mean(rocs)
-    median = statistics.median(rocs)
-    #axes[1].vlines(mean, 0, 50)
-    axes[1,0].vlines(median, 0, 70)
-    axes[1,0].set_xlabel("ROC curve AUCs")
-    axes[1,0].set_xlim(0,1)
-    axes[1,0].set_ylim(0,70)
-
-    prs = [metrics[key][0] for key in metrics]
-    sb.distplot(prs, kde=False, bins=bins, ax=axes[1])
-    mean = statistics.mean(prs)
-    median = statistics.median(prs)
-    #axes[1].vlines(mean, 0, 50)
-    axes[1].vlines(median, 0, 100)
-    axes[1].set_xlabel("PR curve AUCs")
+    sb.lineplot(TPRs, PPVs, ci=None, linewidth=1.2, color='purple', ax=axes[1])
+    for key in b20: sb.lineplot(metrics[key][2], metrics[key][4], ci=None, linewidth=0.6, color='blue', ax=axes[1])
+    for key in w20: sb.lineplot(metrics[key][2], metrics[key][4], ci=None, linewidth=0.6, color='orange', ax=axes[1])
+    axes[1].set_xlabel("Recall")
+    axes[1].set_ylabel("Precision")
     axes[1].set_xlim(0,1)
-    axes[1].set_ylim(0,100)
-    fig.savefig('allPRs.png')
+    axes[1].set_ylim(0,1)
+    fig.savefig('ROC-PR.png')
+
+    ##### MCC - F1 scores
+    fig, axes = plt.subplots(1, 2, figsize=(35, 10))
+    sb.lineplot(thrs, TPRs[1:], ci=None, linewidth=1, color='purple', label='TPR', ax=axes[0])
+    sb.lineplot(thrs, PPVs[1:], ci=None, linewidth=1, color='green', label='PPV', ax=axes[0])
+    sb.lineplot(thrs, MCCs, ci=None, linewidth=1, color='blue', label='MCC', ax=axes[0])
+    sb.lineplot(thrs, F1s, ci=None, linewidth=1, color='orange', label='F1', ax=axes[0])
+    axes[0].set_xlabel("Cutoff")
+    axes[0].set_xlim(0,1)
+    axes[0].set_ylim(0,1)
+
+    best = df.sort_values(8, ascending=False)
+    dic = {'codes':[], 'score':[], 'metric':[]}
+    for code in list(best.index):
+        dic['codes'].append(code)
+        dic['score'].append(metrics[code][7])
+        dic['metric'].append('TPR')
+        dic['codes'].append(code)
+        dic['score'].append(metrics[code][8])
+        dic['metric'].append('PPV')
+    dfb = pd.DataFrame(dic)
+    sb.barplot(x='codes', y='score', hue='metric', data=dfb, ax=axes[1])
+    plt.xticks([])
+    fig.savefig('MCC-F1-TPR-PPV.png')
+    
 
