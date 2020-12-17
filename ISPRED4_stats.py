@@ -71,7 +71,7 @@ def auc_stats(scores):
 
     for el in scores: 
         if el[2] == 1.0: FN += 1
-        else: TN += 1
+        elif el[2] == 0.0: TN += 1
 
     prev = scores[0][1]
     for el in scores:
@@ -96,7 +96,7 @@ def auc_stats(scores):
         if el[2] == 1.0: 
             FN -= 1
             TP += 1
-        else: 
+        elif el[2] == 0.0: 
             TN -= 1
             FP += 1
         prev = el[1]

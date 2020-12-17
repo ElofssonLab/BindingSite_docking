@@ -2,6 +2,7 @@
 from Bio.PDB import *
 from Bio.PDB.DSSP import DSSP
 import argparse
+import sys
 
 three2one = {'ALA':'A','ARG':'R','ASN':'N','ASP':'D',
              'CYS':'C','GLN':'Q','GLU':'E','GLY':'G',
@@ -25,9 +26,9 @@ def interface_extract(strs, strc, dssps, dsspc, chain):
 
         if rasas == 'NA': rasas = None
         if rasac == 'NA': rasac = None
-        if rasas == None or rasac == None: surface.append([residue, 0.5])
-        elif rasac < rasas: surface.append([residue, 1.0])
-        elif rasac == rasas: surface.append([residue, 0])
+        if rasas == None or rasac == None: surface.append([residue, None, 0.5])
+        elif rasac < rasas: surface.append([residue, rasas, 1.0])
+        elif rasac == rasas: surface.append([residue, rasas, 0.0])
 
     return surface
 
@@ -57,9 +58,9 @@ if __name__ == "__main__":
     for ch in chains:
         res_list1 = Selection.unfold_entities(str1[0][ch], 'R')
         surf = interface_extract(res_list1, res_listc, dssp1, dsspc, ch)
-        for res, score in surf: 
-            outfile.write('{}\t{}\t{}\tX\tX\t{}\n'\
-                          .format(ns.s, ch, three2one[res.get_resname()], score))
+        for res, rasa, score in surf: 
+            outfile.write('{}\t{}\t{}\tX\t{}\t{}\n'\
+                          .format(ns.s, ch, three2one[res.get_resname()], rasa, score))
     outfile.close()
 
     
