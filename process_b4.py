@@ -13,7 +13,7 @@ three2one = {'ALA':'A','ARG':'R','ASN':'N','ASP':'D',
              'HIS':'H','ILE':'I','LEU':'L','LYS':'K',
              'MET':'M','PHE':'F','PRO':'P','SER':'S',
              'THR':'T','TRP':'W','TYR':'Y','VAL':'V',
-             'MSE':'M'}
+             'MSE':'M','GLX':'Q'}
 
 def match_alignment(infile, aligned, chain, newpos):
     outlist = []
@@ -40,7 +40,7 @@ def renumber(infileu, infileb, chain, firstpos):
     for BIOchain in strb[0]: bchain = BIOchain
     useq = ''.join([three2one[res.get_resname()] for res in uchain])
     bseq = ''.join([three2one[res.get_resname()] for res in bchain])
-    alignments = pairwise2.align.globalds(useq, bseq, blosum62, -2, -0.5)
+    alignments = pairwise2.align.globalxx(useq, bseq)
     ualigned = alignments[0][0]
     baligned = alignments[0][1]
 
@@ -58,8 +58,7 @@ if __name__ == "__main__":
     ns = parser.parse_args()
 
     if not os.path.exists(ns.o): os.mkdir(ns.o)
-    if not os.path.exists(ns.o+'/str_u'): os.mkdir(ns.o+'/str_u')
-    if not os.path.exists(ns.o+'/str_b'): os.mkdir(ns.o+'/str_b')
+    if not os.path.exists(ns.o+'/str'): os.mkdir(ns.o+'/str')
     p = PDBParser(QUIET=True)
 
     for code in open(ns.c):
@@ -69,13 +68,14 @@ if __name__ == "__main__":
         pathu2 = ns.i+'/'+code+'_u2.pdb'
         pathb1 = ns.i+'/'+code+'_b1.pdb'
         pathb2 = ns.i+'/'+code+'_b2.pdb'
-    
-        outu1 = open(ns.o+'/str_u/'+code+'_u1.pdb','w')
-        outu2 = open(ns.o+'/str_u/'+code+'_u2.pdb','w')
-        outu = open(ns.o+'/str_u/'+code+'.pdb','w')
-        outb1 = open(ns.o+'/str_b/'+code+'_b1.pdb','w')
-        outb2 = open(ns.o+'/str_b/'+code+'_b2.pdb','w')
-        outb = open(ns.o+'/str_b/'+code+'.pdb','w')
+
+        if os.path.exists(ns.o+'/str_b/'+code+'.pdb'): continue
+        outu1 = open(ns.o+'/str/'+code+'_u1.pdb','w')
+        outu2 = open(ns.o+'/str/'+code+'_u2.pdb','w')
+        outu = open(ns.o+'/str/'+code+'_u.pdb','w')
+        outb1 = open(ns.o+'/str/'+code+'_b1.pdb','w')
+        outb2 = open(ns.o+'/str/'+code+'_b2.pdb','w')
+        outb = open(ns.o+'/str/'+code+'_b.pdb','w')
     
         new, linesu1, linesb1 = renumber(pathu1, pathb1, 'A', 0)
         new, linesu2, linesb2 = renumber(pathu2, pathb2, 'B', new)

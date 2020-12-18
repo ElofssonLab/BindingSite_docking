@@ -20,18 +20,7 @@ from pyrosetta.rosetta.protocols.rigid import *
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-def ISPRED_thr_site(ispred, sep, thr=0.1):
-    count = 0
-    site = []
-    for line in open(ispred):
-        count += 1
-        res = count + sep
-        score = float(line.split()[-1])
-        if seq[res-1] == 'G': continue
-        if score > thr: site.append(res)
-    return site
-
-def ISPRED_top_site(ispred, sep, thr=0.5):
+def ISPRED_site(ispred, sep, thr=0.9):
     count = 0
     score_list = []
     for line in open(ispred):
@@ -43,8 +32,6 @@ def ISPRED_top_site(ispred, sep, thr=0.5):
         score_list.append([res,score])
     score_list = np.array(score_list, dtype=np.float32)
     score_list = score_list[score_list[:,1].argsort()[::-1]]
-    if len(score_list)>=21: site = score_list[:20,0]
-    else: site = score_list[:,0]
     return site.flatten()
 
 def get_main_atom(res):
