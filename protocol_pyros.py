@@ -20,24 +20,21 @@ from pyrosetta.rosetta.protocols.rigid import *
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-def ISPRED_site(ispred, sep, thr=0.9):
-    count = 0
+def ISPRED_site(ispred, sequence, sep, thr=0.9):
     score_list = []
-    for line in open(ispred):
-        count += 1
-        res = count + sep
+    for p, line in enumerate(open(ispred)):
         score = float(line.split()[-1])
-        if score < thr: continue
-        if seq[res-1] == 'G': continue
-        score_list.append([res,score])
+        if score < thr or sequence[p] == 'G': continue
+        score_list.append([p+sep+1, score]) 
     score_list = np.array(score_list, dtype=np.float32)
     score_list = score_list[score_list[:,1].argsort()[::-1]]
-    return site.flatten()
+    score_list = np.array(score_list[:,0].flatten(), dtype=np.int)
+    return score_list
 
 def get_main_atom(res):
     atoms = [atom.get_id() for atom in res]
-    if 'CB' in atoms: return res['CB']
-    elif 'CA' in atoms: return res['CA']
+    if 'CB' in atoms: return 'CB'
+    elif 'CA' in atoms: return 'CA'
     else: return None
 
 def find_center(coord_list):
@@ -64,7 +61,20 @@ def get_closest_clusters(siteatoms, clusterdic, largest, thr):
         if dist < thr: good_clust.append(key)
     return good_clust
 
-def format_ISPRED_rst(siteA, siteB):
+def format_allvsall_rst(siteA, siteB):
+    array = []
+    for resA in siteA:
+        resA = int(resA)
+        atomA = get_main_atom(str1['A'][resA])
+        for resB in siteB:
+            resB = int(resB)
+            atomB = get_main_atom(str2['B'][resB])
+            if atomA is None or atomB is None: continue
+            array += ['AtomPair {} {} {} {} FLAT_HARMONIC 8 10 4'\
+                      .format(atomA, resA, atomB, resB)]
+    return array
+
+def format_cluster_rst(siteA, siteB):
     ##### dictionary to map indexes to CB/CA atoms
     siteatomsA = {}
     siteatomsB = {}
@@ -161,43 +171,20 @@ def custom_docking(pose, file1, file2):
     relax.set_movemap(mmap)
 
     ##### Top Confidence constraint #####
-    s1 = ISPRED_top_site(file1, 0)
-    s2 = ISPRED_top_site(file2, len1)
-    arrays = format_ISPRED_rst(s1, s2)
-    print ('Extracted {} constraints'.format(len(arrays[0])))
-    minimize(pose, relax, SF, arrays, 'top')
+    s1 = ISPRED_site(file1, seq1, 0)
+    s2 = ISPRED_site(file2, seq2, len1)
+    array = format_allvsall_rst(s1, s2)
+    minimize(pose, relax, SF, array, 'top')
 
-    ##### Confidence Thr. constraint #####
-    #s1, ns1 = ISPRED_thr_site(file1, 0)
-    #s2, ns2 = ISPRED_thr_site(file2, len1)
-    #array = format_ISPRED_rst(s1, s2, ns1, ns2)
-    #print ('Extracted {} constraints'.format(len(array)))
-    #minimize(pose, relax, SF, array, 'thr')
-
-def minimize(pose, mover, sf, arrays, tag):
-
+def minimize(pose, mover, sf, array, tag):
     print ('True pose energy:'+str(sf(pose)))
-    
     rotation = 60
     translation = 10
     dock_pert = RigidBodyPerturbMover(1, rotation, translation)
-    for _ in range(1000): dock_pert.apply(pose)
-    pose.dump_pdb(ns.out+'_init.pdb')
-    
-    rotation = 10
-    translation = 3
-    dock_pert = RigidBodyPerturbMover(1, rotation, translation)
-
-    count = 0
     for n in range(10):
-        dock_pert.apply(pose)
+        for _ in range(1000): dock_pert.apply(pose)
         print ('Pose energy before dock:'+str(sf(pose)))
-        if count == len(arrays): count = 0
-        apply_rst(pose, arrays[count], tmpdir.name+'/minimize.cst')
-        if count == len(arrays): count = 0
-        #if count > 0: apply_rst(pose, arrays[count], tmpdir.name+'/minimize.cst')
-        count += 1
-
+        apply_rst(pose, array, tmpdir.name+'/minimize.cst')
         mover.apply(pose)
         pose.remove_constraints()
         print ('Pose energy after dock:'+str(sf(pose)))
@@ -229,6 +216,8 @@ if __name__=='__main__':
     ##### Pose initialization #####
     p1 = pose_from_pdb(ns.str1)
     p2 = pose_from_pdb(ns.str2)
+    seq1 = p1.sequence()
+    seq2 = p2.sequence()
     len1 = len(p1.sequence())
     len2 = len(p2.sequence())
     append_pose_to_pose(p1,p2)
@@ -237,7 +226,7 @@ if __name__=='__main__':
     to_centroid = SwitchResidueTypeSetMover('centroid')
     #to_centroid.apply(p1)
 
-    renumber_pdbinfo_based_on_conf_chains(p1)
+    #renumber_pdbinfo_based_on_conf_chains(p1)
     seq = p1.sequence()
     lenseq = len(p1.sequence())
 

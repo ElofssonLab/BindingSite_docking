@@ -9,46 +9,6 @@ from functools import partial
 from Bio.PDB import *
 
 
-"""
-In order to transform coordinates of the ligand (receptor is always considered to be intact) use transformation-rotation matrix and apply the formulas (they are used in aace_gramm):
-
-          xx=xlig_init(k); yy=ylig_init(k); zz=zlig_init(k);
-          xlig_model(k)=t(1)+u(1,1)*xx+u(1,2)*yy+u(1,3)*zz
-          ylig_model(k)=t(2)+u(2,1)*xx+u(2,2)*yy+u(2,3)*zz
-          zlig_model(k)=t(3)+u(3,1)*xx+u(3,2)*yy+u(3,3)*zz
-
-where  xlig_init(k), ylig_init(k) zlig_init(k) are Cartesian coordinates pf the k-th atom for the original ligand position (which you submit to GRAMM fro docking) and
-xlig_mid(k), ylig_mod(k) zlig_mod(k) are transformed Cartesian coordinates.
-
-In order to get translation vector t(3) and rotation matrix u(3,3) from the GRAMM output, use the following transformations:
-
-!-----------------------------------------------------------------------------                                            
-!               Transforming Euler angles into rotation matrix                                                            
-!-----------------------------------------------------------------------------                                            
-       alpha=pi*irot1/180.d0;  beta=pi*irot2/180.d0;  gamma=pi*irot3/180.d0;
-       cosa=dcos(alpha);cosb=dcos(beta); cosg=dcos(gamma)
-       sina=dsin(alpha);sinb=dsin(beta); sing=dsin(gamma)
-       u(1,1)=cosg*cosa
-       u(1,2)=cosg*sina
-       u(1,3)=-sing
-       u(2,1)=sinb*sing*cosa-cosb*sina
-       u(2,2)=sinb*sing*sina+cosb*cosa
-       u(2,3)=cosg*sinb
-       u(3,1)=cosb*sing*cosa+sinb*sina
-       u(3,2)=cosb*sing*sina-sinb*cosa
-       u(3,3)=cosg*cosb
-
-Here irot1, irot2 and irot3 are Euler rotation angles given by GRAMM.
-
-!-----------------------------------------------------------------------------                                            
-!                 Tranforming translation vector                                                                          
-!-----------------------------------------------------------------------------                                            
-       t(1)=tr1+xligcm-u(1,1)*xligcm-u(1,2)*yligcm-u(1,3)*zligcm
-       t(2)=tr2+yligcm-u(2,1)*xligcm-u(2,2)*yligcm-u(2,3)*zligcm
-       t(3)=tr3+zligcm-u(3,1)*xligcm-u(3,2)*yligcm-u(3,3)*zligcm
-
-Here tr1, tr2 and tr3 are translations given by GRAMM and xligcm, yligcm and zligcm are Cartesian coordinates of the center of mass for the ligand in its original position.
-"""
 weights = {'C':12.011, 'N':14.007, 'O':15.999, 'S':32.06}
 
 allowed_atoms = ['N','CA','C','O','OXT','CB',
@@ -201,16 +161,16 @@ if __name__ == "__main__":
     scores1 = np.array(scores1, dtype=np.float32)
     scores2 = np.array(scores2, dtype=np.float32)
     for p in range(scores1.shape[0]): 
-        if scores1[p] == 0.0: scores1[p] = 0.01
+        if scores1[p] < 0.9: scores1[p] = 0.01
     for p in range(scores2.shape[0]): 
-        if scores2[p] == 0.0: scores2[p] = 0.01
+        if scores2[p] < 0.9: scores2[p] = 0.01
     scores1 = np.expand_dims(scores1, axis=1)
     scores2 = np.expand_dims(scores2, axis=0)
     cmap = scores1*scores2
     print (cmap, cmap.shape)
 
     sep = len(get_sep(ns.s1))
-    contactids = [y+1 for y in range(0, cmap.shape[1]) if np.any(cmap[:,y] >= 0.01)]
+    contactids = [y+1 for y in range(0, cmap.shape[1]) if np.any(cmap[:,y] >= 0.9)]
 
     ##### parse structures #####
     p = PDBParser(QUIET=True)
@@ -332,7 +292,6 @@ if __name__ == "__main__":
         full_rtcoord = tf.math.add(full_t, tf.linalg.matmul(full_r, full_xyz))  #
         full_rtcoord = tf.transpose(full_rtcoord, perm=[1,0])                   #
     #############################################################################
-
 
     cores = 5 #mp.cpu_count()-1
     config = tf.ConfigProto()
