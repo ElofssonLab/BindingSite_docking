@@ -68,9 +68,9 @@ def get_rototranslation(data):
     count = 0
     result_batch = []
     with tf.Session(graph=get_rt, config=config) as sess:
-        for pose, m1, m2 in data:
+        for pose, sc, m1, m2 in data:
             r_mat, t_vec = sess.run([r, t], feed_dict = {gr:m1, gt:m2, lcm:cm})
-            result_batch.append([pose, r_mat, t_vec])
+            result_batch.append([pose, sc, r_mat, t_vec])
             count += 1
             if count%1000 == 0: print ('Processed {} rt matrixes!'.format(count))
     return result_batch
@@ -80,7 +80,7 @@ def rototranslate_coord(data, c_only=True):
     result_batch = []
     with tf.Session(graph=rt_comp, config=config) as sess:
         for rt in data:
-            rt_coord, p_score = sess.run([rtcoord, score], feed_dict = {r_mat:rt[1], t_vec:rt[2]})
+            rt_coord, p_score = sess.run([rtcoord, score], feed_dict = {shape:rt[1], r_mat:rt[2], t_vec:rt[3]})
             result_batch.append([rt[0], rt_coord, p_score])
             count += 1
             if count%1000 == 0: print ('Roto-translated {} structures!'.format(count))
@@ -161,16 +161,16 @@ if __name__ == "__main__":
     scores1 = np.array(scores1, dtype=np.float32)
     scores2 = np.array(scores2, dtype=np.float32)
     for p in range(scores1.shape[0]): 
-        if scores1[p] < 0.9: scores1[p] = 0.01
+        if scores1[p] == 0.0: scores1[p] = 0.01
     for p in range(scores2.shape[0]): 
-        if scores2[p] < 0.9: scores2[p] = 0.01
+        if scores2[p] == 0.0: scores2[p] = 0.01
     scores1 = np.expand_dims(scores1, axis=1)
     scores2 = np.expand_dims(scores2, axis=0)
     cmap = scores1*scores2
     print (cmap, cmap.shape)
 
     sep = len(get_sep(ns.s1))
-    contactids = [y+1 for y in range(0, cmap.shape[1]) if np.any(cmap[:,y] >= 0.9)]
+    contactids = [y+sep+1 for y in range(0, cmap.shape[1]) if np.any(cmap[:,y] >= 0.9)]
 
     ##### parse structures #####
     p = PDBParser(QUIET=True)
@@ -220,7 +220,7 @@ if __name__ == "__main__":
     
     ##### get contact probabilities #####
     contactids = np.array(contactids, dtype=np.int)
-    lrprobs = cmap[:,contactids-1]
+    lrprobs = cmap[:,contactids-sep-1]
     print (lrprobs)
 
     ##### calculate lcm #####
@@ -264,6 +264,7 @@ if __name__ == "__main__":
             pr = tf.constant(lrprobs)                                           #
             xyz = tf.constant(lcoordinates)                                     #
             rec = tf.constant(rcoordinates)                                     #
+            shape = tf.placeholder(dtype=tf.float32, shape=())                  #
             t_vec = tf.placeholder(dtype=tf.float32, shape=(3, 1))              #
             r_mat = tf.placeholder(dtype=tf.float32, shape=(3, 3))              #
                                                                                 #
@@ -272,13 +273,14 @@ if __name__ == "__main__":
         rtcoord = tf.transpose(rtcoord, perm=[1,0])                             #
                                                                                 #
         ##### scoring #####                                                     #
+        d_thr = 6                                                               #
         pr = 1+tf.math.log(pr)                                                  #
         A = tf.expand_dims(rec, axis=1)                                         #
         B = tf.expand_dims(rtcoord, axis=0)                                     #
         distances = tf.math.sqrt(tf.reduce_sum((A-B)**2, axis=-1))              #
         zeros = tf.zeros(distances.shape, dtype=tf.float32)                     #
-        scores = tf.where(tf.math.less(distances, 12), pr, zeros)               #
-        score = tf.math.reduce_sum(scores)                                      #
+        scores = tf.where(tf.math.less(distances, d_thr), pr, zeros)            #
+        score = tf.math.add(tf.math.reduce_sum(scores), shape)                  #
     #############################################################################
 
     ##### graph for full roto-translation #######################################
@@ -308,7 +310,7 @@ if __name__ == "__main__":
         line = [float(el.strip()) for el in line.split() if el.strip() != '']
         grammr = np.array([line[2], line[3], line[4]], dtype=np.float32)
         grammt = np.array([line[5], line[6], line[7]], dtype=np.float32)
-        mat_jobs.append([int(line[0]), grammr, grammt])
+        mat_jobs.append([int(line[0]), int(line[1]), grammr, grammt])
 
     pool = mp.Pool(processes = cores)
     job_list = split_jobs(mat_jobs, cores)
@@ -321,7 +323,7 @@ if __name__ == "__main__":
     rtdict = {}
     for batch in results: 
         rtlist.extend(batch) 
-        for result in batch: rtdict[result[0]] = result[1:]
+        for result in batch: rtdict[result[0]] = result[2:]
 
     pool = mp.Pool(processes = cores)
     job_list = split_jobs(rtlist, cores)
@@ -337,12 +339,14 @@ if __name__ == "__main__":
     ##### print out #####
     io = PDBIO()
     with tf.Session(graph=full_rt, config=config) as sess:
-        for n in range(10):
+        for n in range(1000):
             pose = sortedlist[n][0]
             score = sortedlist[n][2]
             print ('# {} - Pose {} - Score {}'.format(n+1, pose, score))
-            if not ns.o is None:
+            if ns.o is None: continue
+            if n+1 <= 10 or (n+1%10 == 0 and n+1 <= 100) or (n+1%100 == 0):
                 rt_coord = sess.run(full_rtcoord, feed_dict = {full_r:rtdict[pose][0], full_t:rtdict[pose][1]})
                 for coord, ids in zip(rt_coord, full_lig_id): str3[0][lchainid][ids[0]][ids[1]].set_coord(coord)
                 io.set_structure(str3)
                 io.save('{}_{}.pdb'.format(ns.o, n+1))
+
