@@ -19,10 +19,12 @@ three2one = {'ALA':'A','ARG':'R','ASN':'N','ASP':'D',
 def extract_structure(spath, apath):
     seq = ''
     str_map = {}
+    ##### load pdb file
     struc = p.get_structure('', spath)
+    ##### load naccess file
     rasas = [float(line.split()[5])/100 for line in open(apath) 
              if line.startswith('RES') and line.split()[2] == chain]
-
+    ##### join structure to relative accessibility
     for n, res in enumerate(struc[0][chain]):
         resname = three2one[res.get_resname()]
         str_map[n+1] = [res, rasas[n]]
@@ -47,8 +49,6 @@ def interface_extract():
     posb = posc = 1
     alignedu = alignments[0][0]
     alignedc = alignments[0][1]
-    print ('u', alignedu)
-    print ('c', alignedc)
     ##### annotate unbound data in str_map, appending to each 
     ##### residue info about interaction
     for b, c in zip(alignedu, alignedc):
