@@ -28,10 +28,6 @@ def extract_structure(spath, apath):
         str_map[n+1] = [res, rasas[n]]
         seq += resname
     
-    #print (spath, len(str_map.keys()), len(rasas))
-    #print (''.join([three2one[line.split()[1]] for line in open(apath) if line.startswith('RES') and line.split()[2] == chain]))
-    #print (seq)
-
     assert len(rasas) == len(str_map.keys()),\
            'Structure and rasa have different lengths!'
     

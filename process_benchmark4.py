@@ -46,15 +46,22 @@ def match_numbering(code, partner):
         ##### skip alignment positions with gaps in unbound structures
         ##### without increasing the new residue number
         if u == '-': continue 
-        ##### write out all modified coordinates matching the residue number
+        ##### write out renumbered coordinates matching the residue number
         ##### of atom at index ucount and increment ucount
+        res_name = three2one[ucoord[ucount][17:20]]
         res_number = ucoord[ucount][22:27]
-        while ucoord[ucount][22:27] == res_number:
+        while ucoord[ucount][22:27] == res_number\
+        and three2one[ucoord[ucount][17:20]] == res_name\
+        and ucount < len(ucoord):
             rs = str(renumber).rjust(4)
             renumbered = ucoord[ucount][:21]+chain+rs+' '+ucoord[ucount][27:]
             outu.write(renumbered)
+            if ucount < len(ucoord)-1: ucount += 1
+            else: break
+        ##### skip eventual overlapping residues with same res number
+        while ucoord[ucount][22:27] == res_number and ucount < len(ucoord)-1:
             ucount += 1
-            if ucount == len(ucoord): break
+
         ##### skip alignment positions with gaps in bound structures
         ##### increasing the new residue number
         if b == '-':
@@ -64,26 +71,34 @@ def match_numbering(code, partner):
         ##### indexed line doesnt match residue indicated in the alignment
         ##### (most likely due to gap occurring in unbound)
         while b != three2one[bcoord[bcount][17:20]]: bcount += 1
-        ##### write out all modified coordinates matching the residue number
+        ##### write out renumbered coordinates matching the residue number
         ##### of atom at index bcount and increment bcount
+        res_name = three2one[bcoord[bcount][17:20]]
         res_number = bcoord[bcount][22:27]
-        while bcoord[bcount][22:27] == res_number:
+        while bcoord[bcount][22:27] == res_number\
+        and three2one[bcoord[bcount][17:20]] == res_name\
+        and bcount < len(bcoord):
+            print (res_name, res_number, bcoord[bcount][22:27], three2one[bcoord[bcount][17:20]])
             rs = str(renumber).rjust(4)
             renumbered = bcoord[bcount][:21]+chain+rs+' '+bcoord[bcount][27:]
             outbc.write(renumbered)
             outb.write(renumbered)
+            if bcount < len(bcoord)-1: bcount += 1
+            else: break
+        ##### skip eventual overlapping residues with same res number
+        while bcoord[bcount][22:27] == res_number and bcount < len(bcoord)-1: 
             bcount += 1
-            if bcount == len(bcoord): break
         ##### increment the new residue number
         renumber += 1
 
-    outu.write('TER')
-    outb.write('TER')
-    outbc.write('TER')
+    outu.write('TER\nEND')
+    outb.write('TER\nEND')
+    outbc.write('TER\n')
     if partner != 1: outbc.write('END')
     outbc.close()
     outu.close()
     outb.close()
+    print (renumber)
 
 
 if __name__ == "__main__":
@@ -97,6 +112,7 @@ if __name__ == "__main__":
 
     for code in open(ns.c):
         code = code.rstrip()
+        print (code)
         match_numbering(code, 1)
         match_numbering(code, 2)
 
