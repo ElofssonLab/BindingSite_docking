@@ -3,11 +3,20 @@
 ```
 Steps to reproduce data:
 1 - Clone this directory
+
 2 - Enter the folder and unpack the data directory
+
 3 - Download Benchmark4 dataset (set4) in the data directory
     from this URL: http://dockground.bioinformatics.ku.edu/unbound/request.php
+    and unpack it
+    
 4 - run:
-5 . run:  
+
+    python3 process_benchmark4.py -c list_dimers -i data/benchmark4/pdb/ -o data/processed_b4
+
+5 . run:
+
+      
 
 NOTES
 CONSURFDB RUN (hopefully): https://consurfdb.tau.ac.il/scripts/waitBatch.php?runNumber=1615331348

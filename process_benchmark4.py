@@ -78,7 +78,6 @@ def match_numbering(code, partner):
         while bcoord[bcount][22:27] == res_number\
         and three2one[bcoord[bcount][17:20]] == res_name\
         and bcount < len(bcoord):
-            print (res_name, res_number, bcoord[bcount][22:27], three2one[bcoord[bcount][17:20]])
             rs = str(renumber).rjust(4)
             renumbered = bcoord[bcount][:21]+chain+rs+' '+bcoord[bcount][27:]
             outbc.write(renumbered)
