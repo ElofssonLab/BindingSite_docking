@@ -61,11 +61,13 @@ def interface_extract():
         ##### if there is a match or mismatch
         if b != '-' and c != '-':
             ##### mark as binding site if rasa in unbound chain increases 
-            ##### at least of 10% respective to complex AND if any residue
+            ##### at least of 5% respective to complex AND if any residue
             ##### atom is within 8A from the interacting chain
-            if str_mapu[posb][1] > str_mapc[posc][1]*1.1\
-            and atom != []: str_map[posb] = str_mapu[posb]+[1.0]
-            else: str_map[posb] = str_mapu[posb]+[0.0]
+            if str_mapu[posb][1] > str_mapc[posc][1]*1.05\
+            and atom != [] and str_mapu[posb][1] > 0.2: 
+                str_map[posb] = str_mapu[posb]+[1.0]
+            else: 
+                str_map[posb] = str_mapu[posb]+[0.0]
             posb += 1
             posc += 1
 
@@ -73,8 +75,10 @@ def interface_extract():
         elif b != '-':
             ##### mark as binding site if any residue atom is within
             ##### 8A from the interacting chain
-            if atom != []: str_map[posb] = str_mapu[posb]+[1.0]
-            else: str_map[posb] = str_mapu[posb]+[0.0]
+            if atom != [] and str_mapu[posb][1] > 0.2: 
+                str_map[posb] = str_mapu[posb]+[1.0]
+            else: 
+                str_map[posb] = str_mapu[posb]+[0.0]
             posb += 1
 
         ##### skip positions gapped in the unbound
@@ -96,32 +100,30 @@ def randomize_interfaces(tpr, ppv):
     for acc, score in randomized:
         if score == 1.0: positives += 1
     ##### calculate how many false non-BS we need for desired TPR
-    FNactual = 0
     FNneeded = int(positives*(1-tpr))
     ##### mark random BS residues to be turned in false non-BS
-    while FNactual < FNneeded:
+    while FNneeded > 0:
         for p, (acc, score) in enumerate(randomized):
             if score == 1.0 and random.randint(0,1) == 1:
                 randomized[p][1] = 0.75
-                FNactual += 1
-            if FNactual == FNneeded: break
+                FNneeded -= 1
+            if FNneeded <= 0: break
 
     ##### compute number of remaining residues correctly marked as BS
     positives = 0
     for acc, score in randomized:
         if score == 1.0: positives += 1
     ##### calculate how many false BS we need for desired PPV
-    FPactual = 0
     FPneeded = int(((positives/(ppv*100))*100)-positives)
     ##### mark random true non-BS residues to be turned in false BS
-    while FPactual < FPneeded:
+    while FPneeded > 0:
         nonegative = True
         for p, (acc, score) in enumerate(randomized):
             if score == 0.0 and acc > 0.2 : nonegative = False
             if score == 0.0 and acc > 0.2 and random.randint(0,1) == 1:
                 randomized[p][1] = 0.25
-                FPactual += 1
-            if FPactual == FPneeded: break
+                FPneeded -= 1
+            if FPneeded <= 0: break
         if nonegative: break
 
     ##### turn all marked residues in the relative class
