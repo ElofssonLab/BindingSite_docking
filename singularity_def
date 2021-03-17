@@ -1,0 +1,21 @@
+Bootstrap: docker
+
+From: tensorflow/tensorflow:2.3.0-gpu
+
+%files
+DockQ /home/
+
+%post
+                apt update -y
+                apt-get install apt-utils -y
+                apt-get install dssp -y
+                DEBIAN_FRONTEND=noninteractive apt-get install python3-tk -y
+                python -m pip install keras
+                python -m pip install matplotlib
+                python -m pip install biopython
+                python -m pip install seaborn
+                python -m pip install sklearn
+                python -m pip install jupyter
+                python -m pip install pandas
+                cd /home/DockQ/
+                make
