@@ -21,72 +21,52 @@ def extract_structure(spath, apath):
     str_map = {}
     ##### load pdb file
     struc = p.get_structure('', spath)
+    
     ##### load naccess file
-    rasas = [float(line.split()[5])/100 for line in open(apath) 
-             if line.startswith('RES') and line.split()[2] == chain]
+    rasas = [float(line.split()[5])/100 if line.split()[5] != 'N/A' 
+             else 0.0 for line in open(apath) if line.startswith('RES') 
+             and line.split()[2] == chain]
+    
     ##### join structure to relative accessibility
     for n, res in enumerate(struc[0][chain]):
+        resnum = res.get_id()[1]
         resname = three2one[res.get_resname()]
-        str_map[n+1] = [res, rasas[n]]
+        str_map[resnum] = [res, rasas[n]]
         seq += resname
-    
+
     assert len(rasas) == len(str_map.keys()),\
            'Structure and rasa have different lengths!'
-    
+
     return str_map, seq
 
 def interface_extract():
-    ##### setup neighbour search in the interaction partner
-    strc = p.get_structure('', pathc)
-    ns = NeighborSearch(unfold_entities(strc[0][oppchain], 'A'))
-    
-    ##### load structural data and re-align sequences
-    str_mapu, sequ = extract_structure(pathu, pathua)
-    str_mapc, seqc = extract_structure(pathc, pathca)
-    alignments = pairwise2.align.globalxx(sequ, seqc)
-    
+    ##### load structural data
     str_map = {}
-    posb = posc = 1
-    alignedu = alignments[0][0]
-    alignedc = alignments[0][1]
-    ##### annotate unbound data in str_map, appending to each 
-    ##### residue info about interaction
-    for b, c in zip(alignedu, alignedc):
-        if posb > len(str_mapu.keys()): break
-        ##### compute if res has atoms within 8A from opposite chain
-        for atom in str_mapu[posb][0]:
-            atom = ns.search(atom.get_coord(), 8)
-            if atom != []: break
+    str_mapu, sequ = extract_structure(pathu, pathua)
+    str_mapb, seqb = extract_structure(pathb, pathba)
+    str_mapuc, sequc = extract_structure(pathuc, pathuca)
+    str_mapbc, seqbc = extract_structure(pathbc, pathbca)
 
-        ##### if there is a match or mismatch
-        if b != '-' and c != '-':
-            ##### mark as binding site if rasa in unbound chain increases 
-            ##### at least of 5% respective to complex AND if any residue
-            ##### atom is within 8A from the interacting chain
-            if str_mapu[posb][1] > str_mapc[posc][1]*1.05\
-            and atom != [] and str_mapu[posb][1] > 0.2: 
-                str_map[posb] = str_mapu[posb]+[1.0]
-            else: 
-                str_map[posb] = str_mapu[posb]+[0.0]
-            posb += 1
-            posc += 1
+    ##### iterate over all aligned positions
+    maxpos = max(list(str_mapu.keys()))
+    for pos in range(1, maxpos+1):
+        ##### if position is mapped to bound structure
+        if pos in str_mapb: 
+            ##### mark residue as interface if rasa monomer > rasa dimer
+            if str_mapb[pos][1] > str_mapbc[pos][1]:
+                str_map[pos] = str_mapu[pos]+[1.0]
+            else:
+                str_map[pos] = str_mapu[pos]+[0.0]
+        ##### same with unbound structure if position has no 
+        ##### bound structure match
+        else:
+            if str_mapu[pos][1] > str_mapuc[pos][1]:
+                str_map[pos] = str_mapu[pos]+[1.0]
+            else:
+                str_map[pos] = str_mapu[pos]+[0.0]
 
-        ##### if there is a gap in the complex
-        elif b != '-':
-            ##### mark as binding site if any residue atom is within
-            ##### 8A from the interacting chain
-            if atom != [] and str_mapu[posb][1] > 0.2: 
-                str_map[posb] = str_mapu[posb]+[1.0]
-            else: 
-                str_map[posb] = str_mapu[posb]+[0.0]
-            posb += 1
-
-        ##### skip positions gapped in the unbound
-        elif c != '-': 
-            posc += 1
-    
     ##### convert residue object to one letter aminoacid code
-    for key in str_map: 
+    for key in str_map:
         resname = three2one[str_map[key][0].get_resname()]
         str_map[key][0] = resname
 
@@ -203,7 +183,7 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description = 'Converts PDB complex in ISPRED4 format')
     p.add_argument('-c', required= True, help='code')
     p.add_argument('-s', required= True, help='structure path')
-    p.add_argument('-r', required= True, help='naccess rasa path')
+    p.add_argument('-r', required= True, help='freesasa rsa path')
     p.add_argument('-isp', required= True, help='ISPRED4 binding site prediction')
     p.add_argument('-spp', required= True, help='SPPIder binding site prediction')
     p.add_argument('-dyn', required= True, help='dynJET2 binding site prediction')
@@ -212,13 +192,22 @@ if __name__ == "__main__":
 
     random.seed(42)
     p = PDBParser(QUIET=True)
-    pathu = ns.s+ns.c
-    pathc = ns.s+ns.c[:-7]+'_b.pdb'
-    pathua = ns.r+ns.c[:-4]+'.rsa'
-    pathca = ns.r+ns.c[:-7]+'_b.rsa'
-    isp = ns.isp+ns.c[:-4]+'.ispred4.tsv'
-    dyn = ns.dyn+ns.c[:-4]+'_jet.res'
-    spp = ns.spp+ns.c
+
+    pdb = ns.c[:4]
+    numb = ns.c[6]
+    pathu = '{}{}_u{}.pdb'.format(ns.s, pdb, numb)
+    pathua = '{}{}_u{}.rsa'.format(ns.r, pdb, numb)
+    pathuc = '{}{}_uc.pdb'.format(ns.s, pdb)
+    pathuca = '{}{}_uc.rsa'.format(ns.r, pdb)
+
+    pathb = '{}{}_b{}.pdb'.format(ns.s, pdb, numb)
+    pathba = '{}{}_b{}.rsa'.format(ns.r, pdb, numb)
+    pathbc = '{}{}_bc.pdb'.format(ns.s, pdb)
+    pathbca = '{}{}_bc.rsa'.format(ns.r, pdb)
+    
+    isp = '{}{}_u{}.ispred4.tsv'.format(ns.isp, pdb, numb)
+    dyn = '{}{}_u{}_jet.res'.format(ns.dyn, pdb, numb)
+    spp = '{}{}_u{}.pdb'.format(ns.spp, pdb, numb)
 
     if '_u1' in ns.c: 
         chain = 'A'
@@ -250,7 +239,7 @@ if __name__ == "__main__":
     align_predictions(seqdyn, preddyn)
 
     ##### write out
-    outfile = open(ns.o+ns.c[:-4]+'.pred', 'w')
+    outfile = open(ns.o+ns.c[:-4]+'.site', 'w')
     for pos in keylist:
         for n, val in enumerate(intmap[pos][1:]):
             if n != len(intmap[pos][1:])-1: 

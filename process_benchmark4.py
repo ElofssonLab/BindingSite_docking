@@ -34,10 +34,14 @@ def match_numbering(code, partner):
     ##### fetch atomic coordinates
     ucoord = [line for line in open(pathu) if line.startswith('ATOM')]
     bcoord = [line for line in open(pathb) if line.startswith('ATOM')]
-    if partner == 1: outbc = open('{}/{}_b.pdb'.format(ns.o, code, partner),'w')
-    else: outbc = open('{}/{}_b.pdb'.format(ns.o, code, partner),'a')
-    outu = open('{}/{}_u{}.pdb'.format(ns.o, code, partner),'w')
+    if partner == 1: 
+        outbc = open('{}/{}_bc.pdb'.format(ns.o, code, partner),'w')
+        outuc = open('{}/{}_uc.pdb'.format(ns.o, code, partner),'w')
+    else: 
+        outbc = open('{}/{}_bc.pdb'.format(ns.o, code, partner),'a')
+        outuc = open('{}/{}_uc.pdb'.format(ns.o, code, partner),'a')
     outb = open('{}/{}_b{}.pdb'.format(ns.o, code, partner),'w')
+    outu = open('{}/{}_u{}.pdb'.format(ns.o, code, partner),'w')
 
     renumber = 1
     ucount = bcount = 0
@@ -53,8 +57,10 @@ def match_numbering(code, partner):
         while ucoord[ucount][22:27] == res_number\
         and three2one[ucoord[ucount][17:20]] == res_name\
         and ucount < len(ucoord):
+            matchu = [u, renumber]
             rs = str(renumber).rjust(4)
             renumbered = ucoord[ucount][:21]+chain+rs+' '+ucoord[ucount][27:]
+            outuc.write(renumbered)
             outu.write(renumbered)
             if ucount < len(ucoord)-1: ucount += 1
             else: break
@@ -78,6 +84,7 @@ def match_numbering(code, partner):
         while bcoord[bcount][22:27] == res_number\
         and three2one[bcoord[bcount][17:20]] == res_name\
         and bcount < len(bcoord):
+            matchb = [b, renumber]
             rs = str(renumber).rjust(4)
             renumbered = bcoord[bcount][:21]+chain+rs+' '+bcoord[bcount][27:]
             outbc.write(renumbered)
@@ -88,17 +95,21 @@ def match_numbering(code, partner):
         while bcoord[bcount][22:27] == res_number and bcount < len(bcoord)-1: 
             bcount += 1
         ##### increment the new residue number
+        if matchu != matchb: print (matchu, matchb)
         renumber += 1
-
-    outu.write('TER\nEND')
+    
     outb.write('TER\nEND')
-    outbc.write('TER\n')
-    if partner != 1: outbc.write('END')
+    outu.write('TER\nEND')
+    if partner == 1:
+        outuc.write('TER\n')
+        outbc.write('TER\n')
+    else:
+        outbc.write('TER\nEND')
+        outbc.write('TER\nEND')
     outbc.close()
+    outuc.close()
     outu.close()
     outb.close()
-    print (renumber)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = "Prepare Benchmark4 structures")
