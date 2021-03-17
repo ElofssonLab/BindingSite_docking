@@ -4,7 +4,8 @@
 Steps to reproduce data:
 1 - Clone this directory
 
-2 - Enter the folder and unpack the data directory
+2 - Enter the data folder and unpack all zipped files:
+
 
 3 - Download Benchmark4 dataset (set4) in the data directory
     from this URL: http://dockground.bioinformatics.ku.edu/unbound/request.php

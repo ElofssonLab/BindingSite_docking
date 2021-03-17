@@ -295,7 +295,7 @@ if __name__ == "__main__":
         full_rtcoord = tf.transpose(full_rtcoord, perm=[1,0])                   #
     #############################################################################
 
-    cores = 7
+    cores = int(mp.cpu_count()-1)
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
 
