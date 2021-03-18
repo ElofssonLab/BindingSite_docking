@@ -6,7 +6,7 @@ folder=`pwd`
 
 if [[ ! -f $out ]]
 then
-    mkdir $out
+    mkdir results/$out
 fi
 
 while read id; do
