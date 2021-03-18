@@ -153,6 +153,7 @@ if __name__ == "__main__":
     p.add_argument('-s1', required= True, help='structure file 1')
     p.add_argument('-s2', required= True, help='structure file 2')
     p.add_argument('-c', required= True, type=int, help='label file column')
+    p.add_argument('-n', required= False, default=0, type=int, help='number of cores to use')
     p.add_argument('-o', required= False, default=None, help='output file path and prefix to write models (no format)')
     ns = p.parse_args()
 
@@ -201,7 +202,6 @@ if __name__ == "__main__":
     ##### ligand CB/CA coordinates #####
     full_lig = []
     full_lig_id = []
-    #print (lig_res)
     for res in lig_res:
         resid = res.get_id()
         for atom in res:
@@ -294,8 +294,9 @@ if __name__ == "__main__":
         full_rtcoord = tf.math.add(full_t, tf.linalg.matmul(full_r, full_xyz))  #
         full_rtcoord = tf.transpose(full_rtcoord, perm=[1,0])                   #
     #############################################################################
-
-    cores = int(mp.cpu_count()-1)
+    
+    if ns.n != 0: cores = ns.n
+    else: cores = int(mp.cpu_count()-1)
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
 
@@ -314,7 +315,6 @@ if __name__ == "__main__":
 
     pool = mp.Pool(processes = cores)
     job_list = split_jobs(mat_jobs, cores)
-    print (job_list)
     results = pool.map(get_rototranslation, job_list)
     pool.close()
     pool.join()
