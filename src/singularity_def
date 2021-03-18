@@ -2,13 +2,13 @@ Bootstrap: docker
 
 From: tensorflow/tensorflow:1.13.2-gpu-py3-jupyter
 
-%files
-DockQ /home/
+#%files
+#DockQ /home/
 
 %post
                 apt update -y
                 apt-get install apt-utils -y
-                apt-get install dssp -y
+                apt-get install dssp git -y
                 DEBIAN_FRONTEND=noninteractive apt-get install python3-tk -y
                 python3 -m pip install keras
                 python3 -m pip install matplotlib
@@ -17,5 +17,6 @@ DockQ /home/
                 python3 -m pip install sklearn
                 python3 -m pip install jupyter
                 python3 -m pip install pandas
-                cd /home/DockQ/
+                git clone https://github.com/bjornwallner/DockQ.git
+                cd DockQ/
                 make
