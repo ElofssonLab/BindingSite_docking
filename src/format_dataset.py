@@ -8,6 +8,7 @@ from Bio import pairwise2
 from Bio.Align import substitution_matrices
 from Bio.PDB.Selection import unfold_entities
 from Bio.PDB.NeighborSearch import NeighborSearch
+from Bio.PDB.DSSP import DSSP
 
 three2one = {'ALA':'A','ARG':'R','ASN':'N','ASP':'D',
              'CYS':'C','GLN':'Q','GLU':'E','GLY':'G',
@@ -16,51 +17,74 @@ three2one = {'ALA':'A','ARG':'R','ASN':'N','ASP':'D',
              'THR':'T','TRP':'W','TYR':'Y','VAL':'V',
              'MSE':'M','GLX':'Q'}
 
-def extract_structure(spath, apath):
+def extract_structure(spath):
     seq = ''
+    rasas = {}
     str_map = {}
     ##### load pdb file
     struc = p.get_structure('', spath)
-    
-    ##### load naccess file
-    rasas = [float(line.split()[5])/100 if line.split()[5] != 'N/A' 
-             else 0.0 for line in open(apath) if line.startswith('RES') 
-             and line.split()[2] == chain]
-    
-    ##### join structure to relative accessibility
-    for n, res in enumerate(struc[0][chain]):
+    dssp = DSSP(struc[0], spath)
+    ##### initialize a neighbour search toward partner chain
+    if '_uc' in spath or '_bc' in spath:
+        opp_chain = unfold_entities(struc[0][oppchain], 'A')
+        ns = NeighborSearch(opp_chain)
+
+    ##### join structure to relative accessibility values 
+    ##### and neighbours presence in the thr. of 8A (1-yes, 0-no)
+    keylist = []
+    for res in struc[0][chain]:
         resnum = res.get_id()[1]
         resname = three2one[res.get_resname()]
-        str_map[resnum] = [res, rasas[n]]
+        try: rasa = round(dssp[(chain, resnum)][3], 3)
+        except: rasa = None
         seq += resname
 
-    assert len(rasas) == len(str_map.keys()),\
-           'Structure and rasa have different lengths!'
+        if '_uc' in spath or '_bc' in spath:
+            neigh = 0
+            for atom in res: 
+                if ns.search(atom.get_coord(), 8) != []:
+                    neigh = 1
+                    break
 
-    return str_map, seq
+            if type(rasa) == float: str_map[resnum] = [res, rasa, neigh]
+            else: 
+                print ('Pos {} missing from {}'.format(resnum, spath))
+                str_map[resnum] = [res, 0.0, neigh]
+        else: 
+            if type(rasa) == float: str_map[resnum] = [res, rasa]
+            else:
+                print ('Pos {} missing from {}'.format(resnum, spath))
+                str_map[resnum] = [res, 0.0]
+
+        keylist.append(resnum)
+
+    return str_map, seq, keylist
 
 def interface_extract():
     ##### load structural data
     str_map = {}
-    str_mapu, sequ = extract_structure(pathu, pathua)
-    str_mapb, seqb = extract_structure(pathb, pathba)
-    str_mapuc, sequc = extract_structure(pathuc, pathuca)
-    str_mapbc, seqbc = extract_structure(pathbc, pathbca)
+    str_mapu, sequ, keysu = extract_structure(pathu)
+    str_mapb, seqb, keysb = extract_structure(pathb)
+    str_mapuc, sequc, keysuc = extract_structure(pathuc)
+    str_mapbc, seqbc, keysbc = extract_structure(pathbc)
 
     ##### iterate over all aligned positions
-    maxpos = max(list(str_mapu.keys()))
-    for pos in range(1, maxpos+1):
+    for pos in range(1, max(keysu)+1):
         ##### if position is mapped to bound structure
         if pos in str_mapb: 
             ##### mark residue as interface if rasa monomer > rasa dimer
-            if str_mapb[pos][1] > str_mapbc[pos][1]:
+            ##### or if its rasa is >= 0.2 and 
+            ##### it is closer than thr to partner chain
+            if str_mapb[pos][1] > str_mapbc[pos][1]\
+            or str_mapbc[pos][2] == 1 and str_mapbc[pos][1] >= 0.2:
                 str_map[pos] = str_mapu[pos]+[1.0]
             else:
                 str_map[pos] = str_mapu[pos]+[0.0]
         ##### same with unbound structure if position has no 
         ##### bound structure match
         else:
-            if str_mapu[pos][1] > str_mapuc[pos][1]:
+            if str_mapu[pos][1] > str_mapuc[pos][1]\
+            or str_mapuc[pos][2] == 1 and str_mapuc[pos][1] >= 0.2:
                 str_map[pos] = str_mapu[pos]+[1.0]
             else:
                 str_map[pos] = str_mapu[pos]+[0.0]
@@ -70,9 +94,9 @@ def interface_extract():
         resname = three2one[str_map[key][0].get_resname()]
         str_map[key][0] = resname
 
-    return str_map, sequ
+    return str_map, sequ, keysu
 
-def randomize_interfaces(tpr, ppv):
+def randomize_interfaces(tpr, ppv, intmap, keylist):
     randomized = [[intmap[pos][1], intmap[pos][2]] for pos in keylist]
 
     ##### compute number of real binding site (BS) residues
@@ -157,8 +181,8 @@ def format_dynJET2():
             count += 1
     return predmap, seq
 
-def align_predictions(pseq, pdic):
-    alignments = pairwise2.align.globalxx(realseq, pseq)
+def align_predictions(pseq, rseq, pdic, rdic):
+    alignments = pairwise2.align.globalxx(rseq, pseq)
 
     posr = posp = 1
     alignedr = alignments[0][0]
@@ -167,21 +191,53 @@ def align_predictions(pseq, pdic):
         ##### if there is a match or mismatch
         if r != '-' and p != '-':
             if r != p: print ('Mismatch!', r, p)
-            intmap[posr].append(pdic[posp][1])
+            rdic[posr].append(pdic[posp][1])
             posr += 1
             posp += 1
         ##### if there is a gap in the prediction
         elif r != '-':
-            intmap[posr].append(0.0)
+            rdic[posr].append(0.0)
             posr += 1
         ##### skip positions gapped in unbound sequence
         elif p != '-':
             posp += 1
 
+def main(numb):
+    print ('####################', pdb)
+    ##### binding sites ground truth
+    intmap, realseq, keylist = interface_extract()
+
+    ##### ground truth controlled randomization
+    for tpr in [0.25, 0.5]:
+        for ppv in [0.5, 0.75]:
+            rand = randomize_interfaces(tpr, ppv, intmap, keylist)
+            for key in keylist:
+                intmap[key].append(rand[key][1])
+
+    ##### mapping predictions to unbound sequence
+    predisp, seqisp = format_ISPRED4()
+    align_predictions(seqisp, realseq, predisp, intmap)
+
+    predspp, seqspp = format_SPPIder()
+    align_predictions(seqspp, realseq, predspp, intmap)
+
+    preddyn, seqdyn = format_dynJET2()
+    align_predictions(seqdyn, realseq, preddyn, intmap)
+
+    ##### write out
+    outfile = open(ns.o+pdb+'_u'+str(numb)+'.site', 'w')
+    for pos in keylist:
+        for n, val in enumerate(intmap[pos][1:]):
+            if n != len(intmap[pos][1:])-1:
+                outfile.write(str(round(float(val), 2))+'\t')
+            else:
+                outfile.write(str(round(float(val), 2))+'\n')
+    outfile.close()
+
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description = 'Converts PDB complex in ISPRED4 format')
-    p.add_argument('-c', required= True, help='code')
+    p.add_argument('-l', required= True, help='code list')
     p.add_argument('-s', required= True, help='structure path')
     p.add_argument('-r', required= True, help='freesasa rsa path')
     p.add_argument('-isp', required= True, help='ISPRED4 binding site prediction')
@@ -193,59 +249,29 @@ if __name__ == "__main__":
     random.seed(42)
     p = PDBParser(QUIET=True)
 
-    pdb = ns.c[:4]
-    numb = ns.c[6]
-    pathu = '{}{}_u{}.pdb'.format(ns.s, pdb, numb)
-    pathua = '{}{}_u{}.rsa'.format(ns.r, pdb, numb)
-    pathuc = '{}{}_uc.pdb'.format(ns.s, pdb)
-    pathuca = '{}{}_uc.rsa'.format(ns.r, pdb)
+    for pdb in open(ns.l):
+        pdb = pdb.rstrip()
+        for n in [1,2]:
+            pathu = '{}{}_u{}.pdb'.format(ns.s, pdb, n)
+            pathua = '{}{}_u{}.dssp'.format(ns.r, pdb, n)
+            pathuc = '{}{}_uc.pdb'.format(ns.s, pdb)
+            pathuca = '{}{}_uc.dssp'.format(ns.r, pdb)
+            pathb = '{}{}_b{}.pdb'.format(ns.s, pdb, n)
+            pathba = '{}{}_b{}.dssp'.format(ns.r, pdb, n)
+            pathbc = '{}{}_bc.pdb'.format(ns.s, pdb)
+            pathbca = '{}{}_bc.dssp'.format(ns.r, pdb)
+            isp = '{}{}_u{}.ispred4.tsv'.format(ns.isp, pdb, n)
+            dyn = '{}{}_u{}_jet.res'.format(ns.dyn, pdb, n)
+            spp = '{}{}_u{}.pdb'.format(ns.spp, pdb, n)
 
-    pathb = '{}{}_b{}.pdb'.format(ns.s, pdb, numb)
-    pathba = '{}{}_b{}.rsa'.format(ns.r, pdb, numb)
-    pathbc = '{}{}_bc.pdb'.format(ns.s, pdb)
-    pathbca = '{}{}_bc.rsa'.format(ns.r, pdb)
+            if n == 1:
+                chain = 'A'
+                oppchain = 'B'
+            else:
+                chain = 'B'
+                oppchain = 'A'
+
+            main(n)
+            
     
-    isp = '{}{}_u{}.ispred4.tsv'.format(ns.isp, pdb, numb)
-    dyn = '{}{}_u{}_jet.res'.format(ns.dyn, pdb, numb)
-    spp = '{}{}_u{}.pdb'.format(ns.spp, pdb, numb)
-
-    if '_u1' in ns.c: 
-        chain = 'A'
-        oppchain = 'B'
-    else: 
-        chain = 'B'
-        oppchain = 'A'
-
-    print ('####################', ns.c[:-4])
-    ##### binding sites ground truth
-    intmap, realseq = interface_extract()
-    keylist = intmap.keys()
-    
-    ##### ground truth controlled randomization
-    for tpr in [0.25, 0.5]:
-        for ppv in [0.5, 0.75]:
-            rand = randomize_interfaces(tpr, ppv)
-            for key in keylist:
-                intmap[key].append(rand[key][1])
-
-    ##### mapping predictions to unbound sequence 
-    predisp, seqisp = format_ISPRED4()
-    align_predictions(seqisp, predisp)
-
-    predspp, seqspp = format_SPPIder()
-    align_predictions(seqspp, predspp)
-    
-    preddyn, seqdyn = format_dynJET2()
-    align_predictions(seqdyn, preddyn)
-
-    ##### write out
-    outfile = open(ns.o+ns.c[:-4]+'.site', 'w')
-    for pos in keylist:
-        for n, val in enumerate(intmap[pos][1:]):
-            if n != len(intmap[pos][1:])-1: 
-                outfile.write(str(round(float(val), 2))+'\t')
-            else: 
-                outfile.write(str(round(float(val), 2))+'\n')
-    outfile.close()
-
     
