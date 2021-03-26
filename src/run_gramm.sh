@@ -17,5 +17,8 @@ while read id; do
 	echo '' >> $folder/results/$out/$id'_'$n'-tmp';  
 	cat $folder/results/$out/$id'_'$n'.pdb' >> $folder/results/$out/$id'_'$n'-tmp'; 
 	mv $folder/results/$out/$id'_'$n'-tmp' $folder/results/$out/$id'_'$n'.pdb'; 
+	singularity exec --bind $folder:$folder --nv $folder/BSenv.sif /DockQ/DockQ.py -short $folder/results/$out/$id'_'$n'.pdb' $folder/data/processed_b4/$id'_uc.pdb' | grep 'DockQ' >> $folder/results/$out/$id'_results';
     done;
+
 done<$list
+
