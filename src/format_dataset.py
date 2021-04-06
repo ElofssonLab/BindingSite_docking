@@ -75,16 +75,16 @@ def interface_extract():
             ##### mark residue as interface if rasa monomer > rasa dimer
             ##### or if its rasa is >= 0.2 and 
             ##### it is closer than thr to partner chain
-            if str_mapb[pos][1] > str_mapbc[pos][1]\
-            or str_mapbc[pos][2] == 1 and str_mapbc[pos][1] >= 0.2:
+            if str_mapb[pos][1] > str_mapbc[pos][1]:#\
+            #or str_mapbc[pos][2] == 1 and str_mapbc[pos][1] >= 0.2:
                 str_map[pos] = str_mapu[pos]+[1.0]
             else:
                 str_map[pos] = str_mapu[pos]+[0.0]
         ##### same with unbound structure if position has no 
         ##### bound structure match
         else:
-            if str_mapu[pos][1] > str_mapuc[pos][1]\
-            or str_mapuc[pos][2] == 1 and str_mapuc[pos][1] >= 0.2:
+            if str_mapu[pos][1] > str_mapuc[pos][1]:#\
+            #or str_mapuc[pos][2] == 1 and str_mapuc[pos][1] >= 0.2:
                 str_map[pos] = str_mapu[pos]+[1.0]
             else:
                 str_map[pos] = str_mapu[pos]+[0.0]
@@ -138,12 +138,82 @@ def randomize_interfaces(tpr, ppv, intmap, keylist):
     randomized = {pos:randomized[idx] for idx, pos in enumerate(keylist)}
     return randomized
 
-def format_ISPRED4():
+def format_BIPSPI(bip):
+    seq = ''
+    predmap = {}
+    maxval = 9.159
+    struc = p.get_structure('', pathu)
+    for line in open(bip):
+        if line.startswith('chainId'): continue
+        n = int(line.split()[1])
+        res = struc[0][chain][n].get_resname()
+        res = three2one[res]
+        score = str(float(line.split()[-1])/maxval)
+        predmap[n] = [res, score]
+    resnumb = max(list(predmap.keys()))
+    for res in struc[0][chain]:
+        n = res.get_id()[1]
+        resname = res.get_resname()
+        resname = three2one[resname]
+        if n in predmap: seq += predmap[n][0]
+        else:
+            predmap[n] = [resname, 0.0]
+            seq += predmap[n][0]
+    return predmap, seq
+
+def format_ISPRED4(crf=False):
     seq = ''
     predmap = {}
     for n, line in enumerate(open(isp)):
-        predmap[n+1] = [line.split()[3], line.split()[-1]]
+        if crf:
+            if line.split()[-2] == 'I': score = 1.0
+            else: score = 0.0
+            predmap[n+1] = [line.split()[3], score]
+        else:
+            predmap[n+1] = [line.split()[3], line.split()[-1]]
         seq += line.split()[3]
+    return predmap, seq
+
+def format_predus():
+    seq = ''
+    predmap = {}
+    struc = p.get_structure('', pathu)
+    for line in open(pre):
+        for n in line.split(): 
+            if n == 'PredUS': continue
+            n = int(n)
+            res = struc[0][chain][n].get_resname()
+            res = three2one[res]
+            predmap[n] = [res, '1.0']
+    for res in struc[0][chain]:
+        n = res.get_id()[1]
+        if n not in predmap:
+            res = struc[0][chain][n].get_resname()
+            res = three2one[res]
+            predmap[n] = [res, '0.0']
+    for n in range(1, max(predmap.keys())+1): seq += predmap[n][0]
+    return predmap, seq
+
+def format_dynJET2(trace=False):
+    seq = ''
+    count = 1
+    predmap = {}
+    for line in open(dyn):
+        if not line.startswith('AA'):
+            resname = three2one[line.split()[0]]
+            if not trace:
+                score = max(float(line.split()[12]),
+                            float(line.split()[13]),
+                            float(line.split()[14]))
+                if line.split()[15] == '1.0':
+                    predmap[count] = [resname, score]
+                else:
+                    predmap[count] = [resname, 0.0]
+            else:
+                score = float(line.split()[11])
+                predmap[count] = [resname, score]
+            seq += resname
+            count += 1
     return predmap, seq
 
 def format_SPPIder():
@@ -163,27 +233,30 @@ def format_SPPIder():
             count += 1
     return predmap, seq
 
-def format_dynJET2():
+def format_consurf():
     seq = ''
-    count = 1
     predmap = {}
-    for line in open(dyn):
-        if not line.startswith('AA'):
-            score = max(float(line.split()[12]), 
-                        float(line.split()[13]), 
-                        float(line.split()[14]))
-            resname = three2one[line.split()[0]]
-            if line.split()[15] == '1.0':
-                predmap[count] = [resname, score]
-            else: 
-                predmap[count] = [resname, 0.0]
-            seq += resname
-            count += 1
+    main = False
+    maxval = 3.666
+    minval = -2.435
+    outfile = open(con)
+    for line in outfile:
+        if line.startswith(' POS'): 
+            outfile.readline()
+            main=True
+            continue
+        if not main: continue
+        if line.strip() == '': break
+        n = int(line.split()[0])
+        res = line.split()[1]
+        score = (float(line.split()[3])-minval)/(maxval-minval)
+        predmap[n] = [res, score]
+        seq += res
     return predmap, seq
 
 def align_predictions(pseq, rseq, pdic, rdic):
     alignments = pairwise2.align.globalxx(rseq, pseq)
-
+    
     posr = posp = 1
     alignedr = alignments[0][0]
     alignedp = alignments[0][1]
@@ -215,17 +288,37 @@ def main(numb):
                 intmap[key].append(rand[key][1])
 
     ##### mapping predictions to unbound sequence
-    predisp, seqisp = format_ISPRED4()
-    align_predictions(seqisp, realseq, predisp, intmap)
 
-    predspp, seqspp = format_SPPIder()
-    align_predictions(seqspp, realseq, predspp, intmap)
+    pred, seq = format_BIPSPI(bip1)
+    align_predictions(seq, realseq, pred, intmap)
 
-    preddyn, seqdyn = format_dynJET2()
-    align_predictions(seqdyn, realseq, preddyn, intmap)
+    pred, seq = format_BIPSPI(bip2)
+    align_predictions(seq, realseq, pred, intmap)
+
+    pred, seq = format_ISPRED4()
+    align_predictions(seq, realseq, pred, intmap)
+
+    pred, seq = format_ISPRED4(crf=True)
+    align_predictions(seq, realseq, pred, intmap)
+
+    pred, seq = format_predus()
+    align_predictions(seq, realseq, pred, intmap)
+
+    pred, seq = format_dynJET2()
+    align_predictions(seq, realseq, pred, intmap)
+
+    pred, seq = format_dynJET2(trace=True)
+    align_predictions(seq, realseq, pred, intmap)
+
+    pred, seq = format_SPPIder()
+    align_predictions(seq, realseq, pred, intmap)
+
+    #pred, seq = format_consurf()
+    #align_predictions(seq, realseq, pred, intmap)
+
 
     ##### write out
-    outfile = open(ns.o+pdb+'_u'+str(numb)+'.site', 'w')
+    outfile = open(ns.s+'/data/formatted_labels/'+pdb+'_u'+str(numb)+'.site', 'w')
     for pos in keylist:
         for n, val in enumerate(intmap[pos][1:]):
             if n != len(intmap[pos][1:])-1:
@@ -237,32 +330,26 @@ def main(numb):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description = 'Converts PDB complex in ISPRED4 format')
-    p.add_argument('-l', required= True, help='code list')
-    p.add_argument('-s', required= True, help='structure path')
-    p.add_argument('-r', required= True, help='freesasa rsa path')
-    p.add_argument('-isp', required= True, help='ISPRED4 binding site prediction')
-    p.add_argument('-spp', required= True, help='SPPIder binding site prediction')
-    p.add_argument('-dyn', required= True, help='dynJET2 binding site prediction')
-    p.add_argument('-o', required= True, help='output formatted file')
+    p.add_argument('-s', required= True, help='BindingSite_docking folder path')
     ns = p.parse_args()
 
     random.seed(42)
     p = PDBParser(QUIET=True)
 
-    for pdb in open(ns.l):
+    for pdb in open(ns.s+'list_dimers'):
         pdb = pdb.rstrip()
         for n in [1,2]:
-            pathu = '{}{}_u{}.pdb'.format(ns.s, pdb, n)
-            pathua = '{}{}_u{}.dssp'.format(ns.r, pdb, n)
-            pathuc = '{}{}_uc.pdb'.format(ns.s, pdb)
-            pathuca = '{}{}_uc.dssp'.format(ns.r, pdb)
-            pathb = '{}{}_b{}.pdb'.format(ns.s, pdb, n)
-            pathba = '{}{}_b{}.dssp'.format(ns.r, pdb, n)
-            pathbc = '{}{}_bc.pdb'.format(ns.s, pdb)
-            pathbca = '{}{}_bc.dssp'.format(ns.r, pdb)
-            isp = '{}{}_u{}.ispred4.tsv'.format(ns.isp, pdb, n)
-            dyn = '{}{}_u{}_jet.res'.format(ns.dyn, pdb, n)
-            spp = '{}{}_u{}.pdb'.format(ns.spp, pdb, n)
+            pathu = '{}/data/processed_b4/{}_u{}.pdb'.format(ns.s, pdb, n)
+            pathuc = '{}/data/processed_b4/{}_uc.pdb'.format(ns.s, pdb)
+            pathb = '{}/data/processed_b4/{}_b{}.pdb'.format(ns.s, pdb, n)
+            pathbc = '{}/data/processed_b4/{}_bc.pdb'.format(ns.s, pdb)
+            bip1 = '{}/data/BIPSPI_predictions/mixed/{}_u{}.res'.format(ns.s, pdb, n)
+            bip2 = '{}/data/BIPSPI_predictions/mixed_2/{}_u{}.res'.format(ns.s, pdb, n)
+            isp = '{}/data/ISPRED_predictions/{}_u{}.ispred4.tsv'.format(ns.s, pdb, n)
+            pre = '{}/data/predus_predictions/{}_u{}.int'.format(ns.s, pdb, n)
+            dyn = '{}/data/dynJET2_predictions/{}_u{}_jet.res'.format(ns.s, pdb, n)
+            spp = '{}/data/SPPIDER_predictions/{}_u{}.pdb'.format(ns.s, pdb, n)
+            con = '{}/data/consurf_predictions/{}_u{}.cons'.format(ns.s, pdb, n)
 
             if n == 1:
                 chain = 'A'
