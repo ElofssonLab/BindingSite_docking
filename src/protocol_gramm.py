@@ -164,10 +164,10 @@ if __name__ == "__main__":
     scores1 = np.array(scores1, dtype=np.float32)
     scores2 = np.array(scores2, dtype=np.float32)
     for p in range(scores1.shape[0]): 
-        if scores1[p] == 0.0: scores1[p] = 0.01
+        #if scores1[p] == 0.0: scores1[p] = 0.01
         if scores1[p] == 1.0: scores1[p] = 0.99
     for p in range(scores2.shape[0]): 
-        if scores2[p] == 0.0: scores2[p] = 0.01
+        #if scores2[p] == 0.0: scores2[p] = 0.01
         if scores2[p] == 1.0: scores2[p] = 0.99
     scores1 = np.expand_dims(scores1, axis=1)
     scores2 = np.expand_dims(scores2, axis=0)
@@ -203,7 +203,7 @@ if __name__ == "__main__":
     full_lig = []
     full_lig_id = []
     for res in lig_res:
-        resid = res.get_id()
+        resid = res.get_id()[1]
         for atom in res:
             atomid = atom.get_id()
             full_lig.append([c for c in atom.get_coord()])
@@ -278,6 +278,7 @@ if __name__ == "__main__":
         A = tf.expand_dims(rec, axis=1)                                         #
         B = tf.expand_dims(rtcoord, axis=0)                                     #
         distances = tf.math.sqrt(tf.reduce_sum((A-B)**2, axis=-1))              #
+#        pr = tf.math.log(pr+0.75)/distances                                     #
         zeros = tf.zeros(distances.shape, dtype=tf.float32)                     #
         scores = tf.where(tf.math.less(distances, 12), pr, zeros)               #
         score = tf.math.reduce_sum(scores)                                      #
@@ -303,6 +304,7 @@ if __name__ == "__main__":
     ##### compute rototranslations #####
     mat_jobs = []
     poses = False
+    count = 0
     for line in open(ns.g):
         if '[match]' in line: 
             poses = True
@@ -312,6 +314,8 @@ if __name__ == "__main__":
         grammr = np.array([line[2], line[3], line[4]], dtype=np.float32)
         grammt = np.array([line[5], line[6], line[7]], dtype=np.float32)
         mat_jobs.append([int(line[0]), grammr, grammt])
+        count += 1
+        if count == 11: break
 
     pool = mp.Pool(processes = cores)
     job_list = split_jobs(mat_jobs, cores)
@@ -346,6 +350,16 @@ if __name__ == "__main__":
             print ('# {} - Pose {} - Score {}'.format(n+1, pose, score))
             if not ns.o is None:
                 rt_coord = sess.run(full_rtcoord, feed_dict = {full_r:rtdict[pose][0], full_t:rtdict[pose][1]})
-                for coord, ids in zip(rt_coord, full_lig_id): str3[0][lchainid][ids[0]][ids[1]].set_coord(coord)
+                for coord, ids in zip(rt_coord, full_lig_id):
+                    str3[0][lchainid][ids[0]][ids[1]].set_coord(coord)
+                    str3[0][lchainid][ids[0]][ids[1]].set_bfactor(scores2[0,ids[0]-1])
                 io.set_structure(str3)
                 io.save('{}_{}.pdb'.format(ns.o, n+1))
+
+        for res in str1[0]['A']:
+            resnum = res.get_id()[1]
+            for atom in res:
+                atomnum = atom.get_id()
+                str1[0]['A'][resnum][atomnum].set_bfactor(scores1[resnum-1, 0])
+        io.set_structure(str1)
+        io.save('{}_r.pdb'.format(ns.o))
