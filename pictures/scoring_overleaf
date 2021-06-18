@@ -1,0 +1,22 @@
+\documentclass{article}
+\usepackage{mathtools}
+
+\title{scoring}
+\author{Gabriele Pozzati}
+\date{April 2021}
+
+\begin{document}
+\[
+S=\sum_{i=1}^{N_1}\sum_{j=1}^{N_2}
+\begin{dcases}
+    -\ln(1-(p_{i}*p_{j})),& \text{if }d_{ij}<12\AA\\
+    0,               & \text{otherwise}
+\end{dcases}
+\]
+\\
+\[ TPR = \frac{TP}{TP+FN} \]
+\\
+\[ PPV = \frac{TP}{TP+FP} \]
+\\
+
+\end{document}

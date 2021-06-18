@@ -281,8 +281,8 @@ def main(numb):
     intmap, realseq, keylist = interface_extract()
 
     ##### ground truth controlled randomization
-    for tpr, ppv in [[0.75,1], [0.75,0.5], [0.75,0.25], 
-                     [1,0.75], [0.5,0.75], [0.25,0.75],
+    for tpr, ppv in [[1,0.75], [1,0.5], [1,0.25], 
+                     [0.75,1], [0.5,1], [0.25,1],
                      [0.5,0.5], [0.5,0.25], [0.25,0.5]]:
         rand = randomize_interfaces(tpr, ppv, intmap, keylist)
         for key in keylist:
