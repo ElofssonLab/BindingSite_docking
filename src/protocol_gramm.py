@@ -148,8 +148,8 @@ def merge(job):
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description = '- Plot PPV stats for a Cmap or a list of Cmaps')
     p.add_argument('-g', required= True, help='gramm output')
-    p.add_argument('-i1', required= True, help='trRosetta predictions')
-    p.add_argument('-i2', required= True, help='trRosetta predictions')
+    p.add_argument('-i1', required= True, help='interface predictions 1')
+    p.add_argument('-i2', required= True, help='interface predictions 2')
     p.add_argument('-s1', required= True, help='structure file 1')
     p.add_argument('-s2', required= True, help='structure file 2')
     p.add_argument('-c', required= True, type=int, help='label file column')

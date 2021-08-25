@@ -2,6 +2,7 @@
 import argparse
 import random
 import sys
+import os
 
 from Bio.PDB import *
 from Bio import pairwise2
@@ -336,6 +337,8 @@ if __name__ == "__main__":
 
     random.seed(42)
     p = PDBParser(QUIET=True)
+    if not os.path.exists(ns.s+'/data/formatted_labels/'):
+        os.mkdir(ns.s+'/data/formatted_labels/')
 
     for pdb in open(ns.s+'list_dimers'):
         pdb = pdb.rstrip()
@@ -350,7 +353,6 @@ if __name__ == "__main__":
             pre = '{}/data/predus_predictions/{}_u{}.int'.format(ns.s, pdb, n)
             dyn = '{}/data/dynJET2_predictions/{}_u{}_jet.res'.format(ns.s, pdb, n)
             spp = '{}/data/SPPIDER_predictions/{}_u{}.pdb'.format(ns.s, pdb, n)
-            con = '{}/data/consurf_predictions/{}_u{}.cons'.format(ns.s, pdb, n)
 
             if n == 1:
                 chain = 'A'
