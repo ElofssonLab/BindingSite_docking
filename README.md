@@ -1,6 +1,6 @@
 # BindingSite_docking
 
-```
+
 Steps to reproduce data:
 1 - Clone this directory
 
@@ -8,7 +8,9 @@ Steps to reproduce data:
 2 - Enter the data folder and unpack all zipped files.
 
 3 - Download Benchmark4 dataset (set4) from this URL:
+    ```
     http://dockground.bioinformatics.ku.edu/unbound/request.php
+    ```
     Move it in the data directory and fully expand it.
 
 4 - Download the Gramm output from: [figshare]
@@ -17,19 +19,21 @@ Steps to reproduce data:
 From step 5 you'll need several python modules, look at the Singularity section of this README for more details.
 
 5 - From the directory BindingSite_docking run:
-
+    ```
     python3 src/process_benchmark4.py -c list_dimers -i data/benchmark4/pdb/ -o data/processed_b4
+    ```
     
     OPTIONAL - if you want to recreate the formatted_labels:
     5A - From the directory BindingSite_docking run:
-         
+         ```
          python3 src/format_dataset.py -s [path to BindingSite_docking folder on your system]
+         ```
          
          You may modify this script to format your own Binding Sites predictions and test them into the pipeline.
        
        
 6 - To select docking poses with binding sites predictions run from the directory BindingSite_docking:
-    
+    ```
     python3 src/protocol_gramm.py \
         -g results/gramm_output/[id]_u1-[id]_u2.res \
         -i1 data/formatted_labels/[id]_u1.site \
@@ -37,7 +41,7 @@ From step 5 you'll need several python modules, look at the Singularity section 
         -s1 data/processed_b4/[id]_u1.pdb \
         -s2 data/processed_b4/[id]_u2.pdb \
         -c [col] -n [#CPU] -o [output_dir]
-    
+    ```
     substituting [id] with a pdb 4 letter code available in processed_b4, [col] with the column of the formatted_labels
     file you want to use for the scoring (counted starting from 0), [#CPU] with the number of CPU you want to use to 
     parallelize and [output_dir] with the path and prefix where you want the output files to be saved.
