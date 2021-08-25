@@ -9,7 +9,9 @@ Steps to reproduce data:
 
 3 - Download Benchmark4 dataset (set4) from this URL:
     ```
+    
     http://dockground.bioinformatics.ku.edu/unbound/request.php
+    
     ```
     Move it in the data directory and fully expand it.
 
@@ -20,11 +22,14 @@ From step 5 you'll need several python modules, look at the Singularity section 
 
 5 - From the directory BindingSite_docking run:
     ```
+    
     python3 src/process_benchmark4.py -c list_dimers -i data/benchmark4/pdb/ -o data/processed_b4
+    
     ```
     
     OPTIONAL - if you want to recreate the formatted_labels:
     5A - From the directory BindingSite_docking run:
+    
          ```
          python3 src/format_dataset.py -s [path to BindingSite_docking folder on your system]
          ```
