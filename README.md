@@ -17,7 +17,7 @@ Steps to reproduce data:
 \
 4 - Download the Gramm output from: 
 \
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[figshare]
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;https://figshare.com/s/1803e314859b537d1e72
 \
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;fully expand it and move all the content of the resulting folder in BindingSite_docking/results/
 \
